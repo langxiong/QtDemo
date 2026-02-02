@@ -1,0 +1,10 @@
+# Build / install artifacts
+build/
+dist/
+
+# CMake user presets
+CMakeUserPresets.json
+
+# OS
+.DS_Store
+Thumbs.db

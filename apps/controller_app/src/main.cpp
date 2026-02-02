@@ -6,10 +6,10 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-#include <QtCharts/QChart>
-#include <QtCharts/QChartView>
-#include <QtCharts/QLineSeries>
-#include <QtCharts/QValueAxis>
+#include <QChart>
+#include <QChartView>
+#include <QLineSeries>
+#include <QValueAxis>
 
 #include "common/config/Config.h"
 #include "common/controller/ControllerRuntime.h"
@@ -82,20 +82,20 @@ int main(int argc, char* argv[]) {
   AddRow(gridControl, 3, "Algo latency (ms):", valAlgoLat, grpControl);
 
   // Trend plot (Qt Charts)
-  auto* seriesCmd = new QtCharts::QLineSeries(&window);
+  auto* seriesCmd = new QLineSeries(&window);
   seriesCmd->setName("cmd");
 
-  auto* chart = new QtCharts::QChart();
+  auto* chart = new QChart();
   chart->addSeries(seriesCmd);
   chart->legend()->hide();
   chart->setTitle("Control Command Trend");
 
-  auto* axisX = new QtCharts::QValueAxis();
+  auto* axisX = new QValueAxis();
   axisX->setLabelFormat("%d");
   axisX->setTitleText("samples");
   axisX->setRange(0, 299);
 
-  auto* axisY = new QtCharts::QValueAxis();
+  auto* axisY = new QValueAxis();
   axisY->setTitleText("cmd");
   axisY->setRange(-2.0, 2.0);
 
@@ -104,7 +104,7 @@ int main(int argc, char* argv[]) {
   seriesCmd->attachAxis(axisX);
   seriesCmd->attachAxis(axisY);
 
-  auto* chartView = new QtCharts::QChartView(chart, &window);
+  auto* chartView = new QChartView(chart, &window);
   chartView->setRenderHint(QPainter::Antialiasing);
   chartView->setMinimumHeight(220);
 

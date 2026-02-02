@@ -30,3 +30,9 @@ target_link_libraries(common
 )
 
 target_compile_features(common PUBLIC cxx_std_17)
+
+install(TARGETS common
+  RUNTIME DESTINATION bin
+  LIBRARY DESTINATION lib
+  ARCHIVE DESTINATION lib
+)

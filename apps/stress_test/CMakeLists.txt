@@ -8,3 +8,7 @@ target_link_libraries(stress_test
 )
 
 target_compile_features(stress_test PRIVATE cxx_std_17)
+
+install(TARGETS stress_test
+  RUNTIME DESTINATION bin
+)

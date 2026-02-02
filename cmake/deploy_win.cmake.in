@@ -1,0 +1,73 @@
+# deploy_win.cmake.in
+message(STATUS "=== Starting Windows Deployment ===")
+message(STATUS "Install prefix: @CMAKE_INSTALL_PREFIX@")
+message(STATUS "Winddeployqt path: @WINDEPLOYQT_EXECUTABLE@")
+message(STATUS "Poco prefix: @POCO_INSTALL_PREFIX@")
+
+# Qt deployment
+if(NOT "@WINDEPLOYQT_EXECUTABLE@" STREQUAL "")
+  if(EXISTS "@WINDEPLOYQT_EXECUTABLE@")
+    message(STATUS "Running windeployqt: @WINDEPLOYQT_EXECUTABLE@")
+
+    # 先检查目标exe是否存在
+    set(TARGET_EXE "@CMAKE_INSTALL_PREFIX@/bin/controller_app.exe")
+    if(EXISTS "${TARGET_EXE}")
+      message(STATUS "Deploying Qt for: ${TARGET_EXE}")
+
+      # 运行 windeployqt
+      execute_process(
+        COMMAND "@WINDEPLOYQT_EXECUTABLE@"
+                --verbose 1
+                --no-translations
+                --no-compiler-runtime
+                "${TARGET_EXE}"
+        WORKING_DIRECTORY "@CMAKE_INSTALL_PREFIX@/bin"
+        RESULT_VARIABLE _windeployqt_rc
+        OUTPUT_VARIABLE _windeployqt_output
+        ERROR_VARIABLE _windeployqt_error
+      )
+
+      if(_windeployqt_rc EQUAL 0)
+        message(STATUS "windeployqt completed successfully")
+        if(_windeployqt_output)
+          message(STATUS "Output: ${_windeployqt_output}")
+        endif()
+      else()
+        message(WARNING "windeployqt failed with code ${_windeployqt_rc}")
+        if(_windeployqt_error)
+          message(WARNING "Error output: ${_windeployqt_error}")
+        endif()
+      endif()
+    else()
+      message(WARNING "Target executable not found: ${TARGET_EXE}")
+      message(WARNING "Make sure controller_app is built and installed before deployment")
+    endif()
+  else()
+    message(WARNING "windeployqt.exe not found at: @WINDEPLOYQT_EXECUTABLE@")
+  endif()
+else()
+  message(WARNING "MRCD_WINDEPLOYQT not set; Qt DLLs/plugins will not be deployed.")
+  message(WARNING "Set -DMRCD_WINDEPLOYQT=.../windeployqt.exe")
+endif()
+
+# Poco deployment from install prefix
+if(NOT "@POCO_INSTALL_PREFIX@" STREQUAL "")
+  set(_poco_bin "@POCO_INSTALL_PREFIX@/bin")
+  if(EXISTS "${_poco_bin}")
+    message(STATUS "Deploying Poco DLLs from: ${_poco_bin}")
+    file(GLOB _poco_dlls "${_poco_bin}/Poco*.dll")
+    if(_poco_dlls)
+      message(STATUS "Found Poco DLLs: ${_poco_dlls}")
+      file(INSTALL DESTINATION "@CMAKE_INSTALL_PREFIX@/bin" TYPE FILE FILES ${_poco_dlls})
+      message(STATUS "Poco DLLs deployed successfully")
+    else()
+      message(WARNING "No Poco*.dll found in ${_poco_bin}")
+    endif()
+  else()
+    message(WARNING "Poco bin directory not found: ${_poco_bin}")
+  endif()
+else()
+  message(STATUS "MRCD_POCO_PREFIX not set; skipping Poco DLL deployment")
+endif()
+
+message(STATUS "=== Windows Deployment Complete ===")
