@@ -17,6 +17,7 @@ public:
   struct Params {
     std::string executable{"algo_worker"};
     std::chrono::milliseconds connectTimeout{500};
+    std::chrono::milliseconds readyTimeout{10000};
     std::chrono::milliseconds restartBackoff{500};
     std::uint32_t maxRestarts{10};
   };

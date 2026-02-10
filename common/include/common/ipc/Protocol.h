@@ -7,6 +7,9 @@ namespace common::ipc {
 constexpr std::uint32_t kMagic = 0x4D524344; // 'MRCD'
 constexpr std::uint16_t kVersion = 1;
 
+/** Single byte written by algo_worker to fd 1 (stdout) when ready to accept IPC; controller reads it from the child's stdout pipe with a bounded timeout. */
+constexpr unsigned char kReadyByte = 0x52; // 'R' for Ready
+
 enum class MsgType : std::uint16_t {
   Ping = 1,
   Pong = 2,

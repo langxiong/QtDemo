@@ -23,6 +23,7 @@ ControllerRuntime::ControllerRuntime(const common::config::Config& cfg,
           common::algo::AlgoProcessManager::Params{
               Poco::Path(applicationDirPath).append("algo_worker.exe").toString(),
               std::chrono::milliseconds(cfg.getInt("ipc.heartbeat_timeout_ms", 500)),
+              std::chrono::milliseconds(cfg.getInt("ipc.ready_timeout_ms", 10000)),
               std::chrono::milliseconds(cfg.getInt("ipc.restart_backoff_ms", 500)),
               static_cast<std::uint32_t>(cfg.getInt("ipc.restart_max", 10))}),
       _heartbeat(_ipcClient,

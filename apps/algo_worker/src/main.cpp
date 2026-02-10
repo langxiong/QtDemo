@@ -1,6 +1,4 @@
 #include <Poco/Util/ServerApplication.h>
-#include <Poco/Util/Option.h>
-#include <Poco/Util/OptionSet.h>
 #include <Poco/Net/SocketAddress.h>
 
 #include "common/fault/FaultInjector.h"
@@ -9,9 +7,13 @@
 #include "common/log/Log.h"
 #include "common/time/MonotonicClock.h"
 
-#include <Poco/NamedEvent.h>
-
+#include <cstdint>
 #include <iostream>
+#if defined(_WIN32)
+#include <io.h>
+#else
+#include <unistd.h>
+#endif
 #include <memory>
 #include <string>
 #include <thread>
@@ -20,10 +22,18 @@
 
 using Poco::Util::Application;
 using Poco::Util::ServerApplication;
-using Poco::Util::Option;
-using Poco::Util::OptionSet;
 
 static std::atomic<bool> g_shutdown_requested = false;
+
+/** Write ready byte to fd 1 so the parent's pipe receives it (not buffered by iostream/Poco). */
+static void write_ready_byte_to_stdout() {
+  const unsigned char byte = common::ipc::kReadyByte;
+#if defined(_WIN32)
+  ::_write(1, &byte, 1);
+#else
+  ::write(1, &byte, 1);
+#endif
+}
 
 void handle_signal(int signum) {
     g_shutdown_requested = true;
@@ -36,25 +46,6 @@ public:
   }
 
 protected:
-  void defineOptions(OptionSet& options) override {
-    ServerApplication::defineOptions(options);
-    options.addOption(
-      Option("ready-event", "r", "Named event for controller sync (used when launched by controller)")
-        .required(false)
-        .argument("name", true));
-  }
-
-  void handleOption(const std::string& name, const std::string& value) override {
-    ServerApplication::handleOption(name, value);
-    if (name == "ready-event") {
-      try {
-        _readyEvent = std::make_unique<Poco::NamedEvent>(value);
-      } catch (const Poco::Exception&) {
-        _readyEvent.reset();
-      }
-    }
-  }
-
   void initialize(Application& self) override {
     loadConfiguration();
     ServerApplication::initialize(self);
@@ -79,14 +70,7 @@ protected:
     Poco::Net::SocketAddress bindAddr(host, static_cast<Poco::UInt16>(port));
     common::ipc::IpcServer server(bindAddr);
 
-    if (_readyEvent) {
-      try {
-        _readyEvent->set();
-      } catch (const Poco::Exception& e) {
-        common::log::Warn("ipc", "ready event signal failed: " + e.displayText());
-        return Application::EXIT_SOFTWARE;
-      }
-    }
+    write_ready_byte_to_stdout();
     common::log::Info("ipc", "waiting for controller connection...");
     while (!server.acceptOne(std::chrono::milliseconds(1000))) {
       if (g_shutdown_requested) break;
@@ -113,8 +97,6 @@ protected:
   }
 
 private:
-    std::unique_ptr<Poco::NamedEvent> _readyEvent;
-
     common::ipc::AlgoResult makeResult(const common::ipc::SensorFrame& in, int computeDelayMs, common::fault::FaultInjector& fault) {
         const auto t0 = common::time::NowMonotonicNs();
 

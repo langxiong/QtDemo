@@ -16,7 +16,12 @@
 #include "common/controller/ControllerRuntime.h"
 #include "common/log/Log.h"
 #include "common/sensor/SensorPipeline.h"
+#include "common/status/Models.h"
 #include "common/status/StatusSnapshot.h"
+
+#include <chrono>
+#include <string>
+#include <thread>
 
 static void AddRow(QGridLayout* grid, int row, const QString& name, QLabel*& valueOut, QWidget* parent) {
   auto* nameLbl = new QLabel(name, parent);
@@ -31,6 +36,14 @@ int main(int argc, char* argv[]) {
   common::log::SetThreadName("ui");
   common::log::Info("main", "controller_app starting");
 
+  bool verifyStartup = false;
+  for (int i = 1; i < argc; ++i) {
+    if (std::string(argv[i]) == "--verify-startup") {
+      verifyStartup = true;
+      break;
+    }
+  }
+
   QApplication app(argc, argv);
 
   QDir appDir(QCoreApplication::applicationDirPath());
@@ -40,6 +53,7 @@ int main(int argc, char* argv[]) {
   common::config::Config cfg;
   if (!cfg.load(configPath.toStdString())) {
     common::log::Error("config", "failed to load " + configPath.toStdString());
+    return 1;
   }
 
   const int sensorRateHz = cfg.getInt("sensor.rate_hz", 200);
@@ -51,6 +65,33 @@ int main(int argc, char* argv[]) {
   common::status::StatusStore statusStore;
   common::controller::ControllerRuntime runtime(cfg, sensor, statusStore, appDir.absolutePath().toStdString());
   runtime.start();
+
+  if (verifyStartup) {
+    const int timeoutMs = cfg.getInt("ipc.ready_timeout_ms", 10000) + 5000;
+    const int pollMs = 200;
+    int elapsed = 0;
+    while (elapsed < timeoutMs) {
+      const auto st = statusStore.read();
+      if (st.algoHealth == common::status::AlgoHealthState::Healthy) {
+        runtime.stop();
+        sensor.stop();
+        common::log::Info("main", "verify-startup: handshake OK");
+        return 0;
+      }
+      if (st.systemState == common::status::SystemState::Degraded && st.lastError != common::status::ErrorCode::Ok) {
+        runtime.stop();
+        sensor.stop();
+        common::log::Error("main", "verify-startup: handshake failed");
+        return 1;
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(pollMs));
+      elapsed += pollMs;
+    }
+    runtime.stop();
+    sensor.stop();
+    common::log::Error("main", "verify-startup: timeout waiting for healthy");
+    return 1;
+  }
 
   QWidget window;
   window.setWindowTitle(QStringLiteral("Medical Robot Control Demo"));

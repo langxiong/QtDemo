@@ -1,9 +1,10 @@
 #include "common/algo/AlgoProcessManager.h"
 
+#include "common/ipc/Protocol.h"
 #include "common/log/Log.h"
 
 #include <Poco/Exception.h>
-#include <Poco/NamedEvent.h>
+#include <Poco/Pipe.h>
 #include <Poco/Process.h>
 
 #include <atomic>
@@ -65,38 +66,41 @@ void AlgoProcessManager::cleanupProcess() {
 
 bool AlgoProcessManager::startProcess() {
   try {
-    const std::string readyEventName = "MedicalRobotAlgoReady_" + std::to_string(Poco::Process::id());
-    Poco::NamedEvent readyEvent(readyEventName);
-
     Poco::Process::Args args;
-    args.push_back("--ready-event=" + readyEventName);
 
+    Poco::Pipe outPipe;
     common::log::Info("algo", "starting algo_worker: " + _params.executable);
-    _processHandle.emplace(Poco::Process::launch(_params.executable, args, nullptr, nullptr, nullptr));
+    _processHandle.emplace(Poco::Process::launch(_params.executable, args, nullptr, &outPipe, nullptr));
+    outPipe.close(Poco::Pipe::CLOSE_WRITE);
 
-    common::log::Info("algo", "waiting for algo_worker to be ready (named event)...");
+    common::log::Info("algo", "waiting for algo_worker ready byte (timeout " + std::to_string(_params.readyTimeout.count()) + " ms)...");
     std::mutex mu;
     std::condition_variable cv;
-    std::atomic<bool> signaled{false};
-    // NamedEvent has no timed wait; waiter thread blocks on wait(), caller blocks on cv with timeout.
-    std::thread waiter([&readyEvent, &signaled, &cv]() {
-      readyEvent.wait();
-      signaled.store(true);
+    std::atomic<bool> gotByte{false};
+    std::atomic<int> byteValue{-1};
+    std::thread reader([&outPipe, &gotByte, &byteValue, &cv]() {
+      unsigned char b = 0;
+      const int n = outPipe.readBytes(&b, 1);
+      if (n == 1) {
+        byteValue.store(static_cast<unsigned char>(b));
+        gotByte.store(true);
+      }
       cv.notify_one();
     });
 
-    constexpr std::chrono::seconds readyTimeout{10};
     std::unique_lock<std::mutex> lock(mu);
-    const bool got = cv.wait_for(lock, readyTimeout, [&signaled]() { return signaled.load(); });
+    const bool ready = cv.wait_for(lock, _params.readyTimeout, [&gotByte]() { return gotByte.load(); });
 
-    if (got) {
+    if (ready && gotByte.load() && byteValue.load() == static_cast<int>(common::ipc::kReadyByte)) {
       lock.unlock();
-      waiter.join();
-      common::log::Info("algo", "algo_worker signaled ready");
+      reader.join();
+      outPipe.close(Poco::Pipe::CLOSE_READ);
+      common::log::Info("algo", "algo_worker ready byte received");
       return true;
     }
-    waiter.detach();
-    common::log::Error("algo", "timeout waiting for algo_worker ready signal");
+    reader.detach();
+    try { outPipe.close(Poco::Pipe::CLOSE_BOTH); } catch (...) {}
+    common::log::Error("algo", "timeout or invalid byte waiting for algo_worker ready signal");
     cleanupProcess();
     return false;
   } catch (const Poco::Exception& e) {
