@@ -5,6 +5,7 @@
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QWidget>
+#include <QDir>
 
 #include <QChart>
 #include <QChartView>
@@ -26,15 +27,19 @@ static void AddRow(QGridLayout* grid, int row, const QString& name, QLabel*& val
 }
 
 int main(int argc, char* argv[]) {
-  common::log::Log::Init("controller_app");
-  common::log::Log::SetThreadName("ui");
-  common::log::Log::Info("main", "controller_app starting");
+  common::log::Init("controller_app");
+  common::log::SetThreadName("ui");
+  common::log::Info("main", "controller_app starting");
 
   QApplication app(argc, argv);
 
+  QDir appDir(QCoreApplication::applicationDirPath());
+  QString configFileName = QCoreApplication::applicationName() + ".ini";
+  QString configPath = appDir.filePath(configFileName);
+
   common::config::Config cfg;
-  if (!cfg.load("config/app.ini")) {
-    common::log::Log::Error("config", "failed to load config/app.ini");
+  if (!cfg.load(configPath.toStdString())) {
+    common::log::Error("config", "failed to load " + configPath.toStdString());
   }
 
   const int sensorRateHz = cfg.getInt("sensor.rate_hz", 200);
@@ -44,7 +49,7 @@ int main(int argc, char* argv[]) {
   sensor.start();
 
   common::status::StatusStore statusStore;
-  common::controller::ControllerRuntime runtime(cfg, sensor, statusStore);
+  common::controller::ControllerRuntime runtime(cfg, sensor, statusStore, appDir.absolutePath().toStdString());
   runtime.start();
 
   QWidget window;
@@ -167,6 +172,6 @@ int main(int argc, char* argv[]) {
   runtime.stop();
   sensor.stop();
 
-  common::log::Log::Info("main", "controller_app exiting");
+  common::log::Info("main", "controller_app exiting");
   return rc;
 }

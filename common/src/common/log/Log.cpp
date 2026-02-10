@@ -13,13 +13,27 @@
 namespace common::log {
 
 namespace {
-std::mutex gMu;
-std::string gProcess;
+std::string gProcessName = "process";
 Poco::Logger* gLogger = nullptr;
+std::once_flag gOnceFlag;
 
 std::string& ThreadNameSlot() {
   static thread_local std::string name;
   return name;
+}
+
+void InitPocoLogger() {
+    Poco::AutoPtr<Poco::PatternFormatter> pf(new Poco::PatternFormatter);
+    pf->setProperty("pattern", "%Y-%m-%d %H:%M:%S.%i [%p][%s] %t");
+    pf->setProperty("times", "local");
+
+    Poco::AutoPtr<Poco::ConsoleChannel> cc(new Poco::ConsoleChannel);
+    Poco::AutoPtr<Poco::FormattingChannel> fc(new Poco::FormattingChannel(pf, cc));
+
+    Poco::Logger::root().setChannel(fc);
+    Poco::Logger::root().setLevel("information");
+
+    gLogger = &Poco::Logger::get(gProcessName);
 }
 
 Poco::Message::Priority ToPoco(Level level) {
@@ -41,22 +55,7 @@ Poco::Message::Priority ToPoco(Level level) {
 }
 
 Poco::Logger& GetLogger() {
-  std::lock_guard<std::mutex> lk(gMu);
-  if (!gLogger) {
-    gProcess = "process";
-
-    Poco::AutoPtr<Poco::PatternFormatter> pf(new Poco::PatternFormatter);
-    pf->setProperty("pattern", "%Y-%m-%d %H:%M:%S.%i [%p] %t %s: %t");
-    pf->setProperty("times", "local");
-
-    Poco::AutoPtr<Poco::ConsoleChannel> cc(new Poco::ConsoleChannel);
-    Poco::AutoPtr<Poco::FormattingChannel> fc(new Poco::FormattingChannel(pf, cc));
-
-    Poco::Logger::root().setChannel(fc);
-    Poco::Logger::root().setLevel("information");
-
-    gLogger = &Poco::Logger::get("mrcd");
-  }
+  std::call_once(gOnceFlag, InitPocoLogger);
   return *gLogger;
 }
 
@@ -64,34 +63,33 @@ std::string MakePrefix(const std::string& module) {
   const auto tid = Poco::Thread::currentTid();
   const auto& tn = ThreadNameSlot();
   std::string thread = tn.empty() ? std::to_string(tid) : tn;
-  return "[" + gProcess + "][" + module + "][" + thread + "] ";
+  return "[" + module + "][" + thread + "] ";
 }
 
 } // namespace
 
-void Log::Init(const std::string& processName) {
-  std::lock_guard<std::mutex> lk(gMu);
-  gProcess = processName;
-  (void)GetLogger();
+void Init(const std::string& processName) {
+  gProcessName = processName;
+  (void)GetLogger(); // Eagerly initialize
 }
 
-void Log::SetThreadName(const std::string& name) {
+void SetThreadName(const std::string& name) {
   ThreadNameSlot() = name;
 }
 
-void Log::Write(Level level, const std::string& module, const std::string& message) {
+void Write(Level level, const std::string& module, const std::string& message) {
   auto& lg = GetLogger();
   lg.log(Poco::Message(lg.name(), MakePrefix(module) + message, ToPoco(level)));
 }
 
-void Log::Trace(const std::string& module, const std::string& message) { Write(Level::Trace, module, message); }
-void Log::Debug(const std::string& module, const std::string& message) { Write(Level::Debug, module, message); }
-void Log::Info(const std::string& module, const std::string& message) { Write(Level::Info, module, message); }
-void Log::Warn(const std::string& module, const std::string& message) { Write(Level::Warn, module, message); }
-void Log::Error(const std::string& module, const std::string&message) { Write(Level::Error, module, message); }
-void Log::Fatal(const std::string& module, const std::string& message) { Write(Level::Fatal, module, message); }
+void Trace(const std::string& module, const std::string& message) { Write(Level::Trace, module, message); }
+void Debug(const std::string& module, const std::string& message) { Write(Level::Debug, module, message); }
+void Info(const std::string& module, const std::string& message) { Write(Level::Info, module, message); }
+void Warn(const std::string& module, const std::string& message) { Write(Level::Warn, module, message); }
+void Error(const std::string& module, const std::string&message) { Write(Level::Error, module, message); }
+void Fatal(const std::string& module, const std::string& message) { Write(Level::Fatal, module, message); }
 
-std::string Log::LevelToString(Level level) {
+std::string LevelToString(Level level) {
   switch (level) {
     case Level::Trace:
       return "TRACE";

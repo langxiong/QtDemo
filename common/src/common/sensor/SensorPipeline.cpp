@@ -24,7 +24,7 @@ void SensorPipeline::stop() {
 SensorSnapshot SensorPipeline::latest() const { return _channel.readSnapshot(); }
 
 void SensorPipeline::run() {
-  common::log::Log::SetThreadName("sensor");
+  common::log::SetThreadName("sensor");
 
   SensorSimulator sim(SensorSimulator::Params{_params.rateHz});
 

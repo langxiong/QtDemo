@@ -1,6 +1,6 @@
 #pragma once
 
-#include "common/config/Config.h"
+#include <Poco/Util/AbstractConfiguration.h>
 
 #include <atomic>
 #include <chrono>
@@ -18,7 +18,7 @@ public:
     int extraDelayMs{0};
   };
 
-  static Params LoadFromConfig(const common::config::Config& cfg);
+  static Params LoadFromConfig(const Poco::Util::AbstractConfiguration& cfg);
 
   explicit FaultInjector(Params p);
 

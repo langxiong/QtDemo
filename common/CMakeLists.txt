@@ -8,7 +8,6 @@ target_sources(common
     src/common/sensor/SensorPipeline.cpp
     src/common/ipc/IpcClient.cpp
     src/common/ipc/IpcServer.cpp
-    src/common/process/ProcessLauncher.cpp
     src/common/heartbeat/HeartbeatMonitor.cpp
     src/common/algo/AlgoProcessManager.cpp
     src/common/controller/ControllerRuntime.cpp

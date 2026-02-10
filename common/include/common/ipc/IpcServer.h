@@ -8,14 +8,18 @@
 
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <mutex>
 #include <optional>
+#include <queue>
+#include <thread>
 
 namespace common::ipc {
 
 class IpcServer {
 public:
   explicit IpcServer(const Poco::Net::SocketAddress& bindAddr);
+  ~IpcServer();
 
   bool start();
   void stop();
@@ -32,15 +36,26 @@ public:
   bool sendAlgoResult(const AlgoResult& result, std::chrono::milliseconds timeout);
 
 private:
+  void receiverLoop();
+  bool receiveOneFrameLocked(FrameHeader& header, std::string& payload);
+
   bool sendFrame(MsgType type, const void* payload, std::size_t payloadSize, std::chrono::milliseconds timeout);
-  bool receiveFrame(FrameHeader& header, std::string& payload, std::chrono::milliseconds timeout);
 
   Poco::Net::SocketAddress _bind;
   Poco::Net::ServerSocket _srv;
 
   mutable std::mutex _mu;
   Poco::Net::StreamSocket _client;
-  bool _connected{false};
+  std::atomic<bool> _connected{false};
+
+  std::thread _receiverThread;
+  std::atomic<bool> _receiverRunning{false};
+
+  std::mutex _queueMu;
+  std::queue<Ping> _pingQueue;
+  std::queue<SensorFrame> _sensorFrameQueue;
+  std::condition_variable _pingCv;
+  std::condition_variable _sensorFrameCv;
 };
 
 } // namespace common::ipc

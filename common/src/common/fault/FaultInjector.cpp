@@ -7,7 +7,7 @@
 
 namespace common::fault {
 
-FaultInjector::Params FaultInjector::LoadFromConfig(const common::config::Config& cfg) {
+FaultInjector::Params FaultInjector::LoadFromConfig(const Poco::Util::AbstractConfiguration& cfg) {
   Params p;
   p.enable = cfg.getBool("fault.enable", false);
   p.crashOnStart = cfg.getBool("fault.crash_on_start", false);
@@ -20,13 +20,13 @@ FaultInjector::FaultInjector(Params p) : _p(p) {}
 
 void FaultInjector::maybeCrashOnStart() {
   if (!_p.enable || !_p.crashOnStart) return;
-  common::log::Log::Error("fault", "fault.crash_on_start triggered");
+  common::log::Error("fault", "fault.crash_on_start triggered");
   std::abort();
 }
 
 void FaultInjector::maybeHangOnStart() {
   if (!_p.enable || !_p.hangOnStart) return;
-  common::log::Log::Error("fault", "fault.hang_on_start triggered");
+  common::log::Error("fault", "fault.hang_on_start triggered");
   for (;;) {
     std::this_thread::sleep_for(std::chrono::seconds(1));
   }

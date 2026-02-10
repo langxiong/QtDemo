@@ -6,6 +6,12 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+if(MSVC)
+  # Force the correct multithreaded-DLL runtime library for all targets.
+  # This ensures consistency with pre-built dependencies like Qt and Poco.
+  set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+endif()
+
 option(MRCD_ENABLE_WARNINGS "Enable compiler warnings" ON)
 
 if(MRCD_ENABLE_WARNINGS)
@@ -37,36 +43,55 @@ add_subdirectory(apps/algo_worker)
 add_subdirectory(apps/stress_test)
 
 # Install layout:
-#   <prefix>/bin   -> executables + runtime DLLs
+#   <prefix>/bin   -> executables + runtime DLLs + configs
 #   <prefix>/lib   -> libraries
-#   <prefix>/config -> runtime config
-install(DIRECTORY config DESTINATION .)
+install(FILES
+  config/controller_app.ini
+  config/algo_worker.ini
+  config/stress_test.ini
+  DESTINATION bin
+)
 
 # Windows: deploy Qt runtime + Poco runtime into the install bin folder
 if(WIN32)
   set(MRCD_WINDEPLOYQT "" CACHE FILEPATH "Path to windeployqt.exe (Qt6).")
   if(NOT MRCD_WINDEPLOYQT)
-    find_program(MRCD_WINDEPLOYQT NAMES windeployqt windeployqt.exe
-      PATHS ${QT6_DIR}/../../bin
-      ${QT6_DIR}/bin
-      ${Qt6_DIR}/../../bin
-      ${Qt6_DIR}/bin
-      NO_DEFAULT_PATH
-    )
+    find_program(MRCD_WINDEPLOYQT NAMES windeployqt windeployqt.exe)
   endif()
 
   set(MRCD_POCO_PREFIX "" CACHE PATH "Poco install prefix (e.g. C:/Users/Zoom/Opt/Poco).")
 
-  # 将变量传递给 install 脚本
-  set(WINDEPLOYQT_EXECUTABLE "${MRCD_WINDEPLOYQT}")
-  set(POCO_INSTALL_PREFIX "${MRCD_POCO_PREFIX}")
+  install(CODE [[
+    # Pull values from the CMake cache (install script does not automatically see cache vars).
+    set(MRCD_WINDEPLOYQT "$CACHE{MRCD_WINDEPLOYQT}")
+    set(MRCD_POCO_PREFIX "$CACHE{MRCD_POCO_PREFIX}")
 
-  # 创建部署脚本
-  configure_file(
-    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/deploy_win.cmake.in
-    ${CMAKE_CURRENT_BINARY_DIR}/deploy_win.cmake
-    @ONLY
-  )
+    # Qt deployment
+    if(NOT MRCD_WINDEPLOYQT)
+      message(WARNING "MRCD_WINDEPLOYQT not found; Qt DLLs/plugins will not be deployed. Set -DMRCD_WINDEPLOYQT=.../windeployqt.exe")
+    else()
+      message(STATUS "Running windeployqt: ${MRCD_WINDEPLOYQT}")
+      execute_process(
+        COMMAND "${MRCD_WINDEPLOYQT}" --no-translations --no-compiler-runtime "${CMAKE_INSTALL_PREFIX}/bin/controller_app.exe"
+        RESULT_VARIABLE _windeployqt_rc
+      )
+      if(NOT _windeployqt_rc EQUAL 0)
+        message(FATAL_ERROR "windeployqt failed with code ${_windeployqt_rc}")
+      endif()
+    endif()
 
-  install(SCRIPT ${CMAKE_CURRENT_BINARY_DIR}/deploy_win.cmake)
+    # Poco deployment from install prefix
+    if(MRCD_POCO_PREFIX)
+      set(_poco_bin "${MRCD_POCO_PREFIX}/bin")
+      message(STATUS "Deploying Poco DLLs from: ${_poco_bin}")
+      file(GLOB _poco_dlls "${_poco_bin}/Poco*.dll")
+      if(_poco_dlls)
+        file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/bin" TYPE FILE FILES ${_poco_dlls})
+      else()
+        message(WARNING "No Poco*.dll found in ${_poco_bin}")
+      endif()
+    else()
+      message(STATUS "MRCD_POCO_PREFIX not set; skipping Poco DLL deployment")
+    endif()
+  ]])
 endif()

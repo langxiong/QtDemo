@@ -48,7 +48,7 @@ ControlCommand ControlLoop::computeCommand(const common::sensor::SensorSnapshot&
 }
 
 void ControlLoop::run() {
-  common::log::Log::SetThreadName("control");
+  common::log::SetThreadName("control");
 
   const double dt = 1.0 / static_cast<double>(std::max(1, _params.rateHz));
   const auto period = std::chrono::duration<double>(dt);

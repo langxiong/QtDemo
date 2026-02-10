@@ -3,10 +3,12 @@
 #include "common/ipc/IpcClient.h"
 
 #include <Poco/Net/SocketAddress.h>
+#include <Poco/Process.h>
 
 #include <chrono>
 #include <cstdint>
 #include <string>
+#include <optional>
 
 namespace common::algo {
 
@@ -20,6 +22,7 @@ public:
   };
 
   AlgoProcessManager(common::ipc::IpcClient& client, Poco::Net::SocketAddress addr, Params params);
+  ~AlgoProcessManager();
 
   // Ensure algo process is running and IPC is connected.
   bool ensureConnected();
@@ -30,6 +33,7 @@ public:
   std::uint64_t restartCount() const { return _restartCount; }
 
 private:
+  void cleanupProcess();
   bool startProcess();
   bool connectIpc();
 
@@ -37,6 +41,7 @@ private:
   Poco::Net::SocketAddress _addr;
   Params _params;
 
+  std::optional<Poco::ProcessHandle> _processHandle;
   std::uint64_t _restartCount{0};
 };
 

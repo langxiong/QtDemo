@@ -1,6 +1,8 @@
 # Build / install artifacts
 build/
+build-debug/
 dist/
+dist-debug/
 
 # CMake user presets
 CMakeUserPresets.json
