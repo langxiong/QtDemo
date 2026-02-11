@@ -7,7 +7,7 @@
 
 namespace common::fault {
 
-FaultInjector::Params FaultInjector::LoadFromConfig(const Poco::Util::AbstractConfiguration& cfg) {
+FaultInjector::Params FaultInjector::LoadFromConfig(const common::config::Config& cfg) {
   Params p;
   p.enable = cfg.getBool("fault.enable", false);
   p.crashOnStart = cfg.getBool("fault.crash_on_start", false);

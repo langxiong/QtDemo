@@ -1,19 +1,15 @@
 #pragma once
 
-#include <Poco/AutoPtr.h>
-#include <Poco/Util/AbstractConfiguration.h>
-#include <Poco/Util/IniFileConfiguration.h>
-
+#include <memory>
 #include <string>
 
 namespace common::config {
 
 class Config {
 public:
-  Config() = default;
+  Config();
 
-  /** Wrap an existing configuration (non-owning; used with Application::config()). */
-  explicit Config(Poco::Util::AbstractConfiguration& cfg);
+  ~Config();
 
   bool load(const std::string& path);
 
@@ -22,12 +18,14 @@ public:
   double getDouble(const std::string& key, double defaultValue) const;
   bool getBool(const std::string& key, bool defaultValue) const;
 
-private:
-  const Poco::Util::AbstractConfiguration* active() const;
+  /** Wrap an opaque Poco config pointer. Prefer ConfigPoco.h WrapPocoConfig(AbstractConfiguration&) for type safety. */
+  static Config WrapPocoConfig(void* pocoAbstractConfiguration);
 
-  Poco::AutoPtr<Poco::Util::IniFileConfiguration> _owned;
-  /** Non-owning pointer; referenced config must outlive this Config instance. Used when wrapping Application::config(). */
-  Poco::Util::AbstractConfiguration* _wrapped{nullptr};
+private:
+  struct ConfigImpl;
+  std::unique_ptr<ConfigImpl> _impl;
+
+  explicit Config(std::unique_ptr<ConfigImpl> impl);
 };
 
 } // namespace common::config

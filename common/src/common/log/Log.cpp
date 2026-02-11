@@ -1,4 +1,5 @@
 #include "common/log/Log.h"
+#include "common/config/Config.h"
 
 #include <Poco/AutoPtr.h>
 #include <Poco/ConsoleChannel.h>
@@ -7,10 +8,8 @@
 #include <Poco/Logger.h>
 #include <Poco/PatternFormatter.h>
 #include <Poco/Thread.h>
-#include <Poco/Util/AbstractConfiguration.h>
 
 #include <mutex>
-#include <unordered_map>
 
 namespace common::log {
 
@@ -78,7 +77,7 @@ void Init(const std::string& processName) {
   (void)GetLogger(); // Eagerly initialize
 }
 
-void InitFromConfig(Poco::Util::AbstractConfiguration& cfg, const std::string& loggerName) {
+void InitFromConfig(const common::config::Config& cfg, const std::string& loggerName) {
   gProcessName = loggerName;
   const std::string pattern = cfg.getString("logging.pattern", "%Y-%m-%d %H:%M:%S.%i [%p][%s] %t");
   const std::string level = cfg.getString("logging.level", "information");

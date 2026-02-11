@@ -17,7 +17,7 @@
 #include <QLineSeries>
 #include <QValueAxis>
 
-#include "common/config/Config.h"
+#include "common/config/ConfigPoco.h"
 #include "common/controller/ControllerRuntime.h"
 #include "common/log/Log.h"
 #include "common/sensor/SensorPipeline.h"
@@ -47,7 +47,7 @@ void ControllerApp::initialize(Poco::Util::Application& self) {
   loadConfiguration();
   addSubsystem(new QtSubsystem);
   Application::initialize(self);
-  common::log::InitFromConfig(config(), "controller_app");
+  common::log::InitFromConfig(common::config::WrapPocoConfig(config()), "controller_app");
 }
 
 void ControllerApp::defineOptions(Poco::Util::OptionSet& options) {
@@ -82,7 +82,7 @@ int ControllerApp::main(const std::vector<std::string>& args) {
   getApplicationPath(appPath);
   appDirPath = appPath.parent().absolute().toString();
 
-  common::config::Config cfg(config());
+  auto cfg = common::config::WrapPocoConfig(config());
   const int sensorRateHz = config().getInt("sensor.rate_hz", 200);
   const int uiRefreshHz = config().getInt("ui.refresh_hz", 30);
 

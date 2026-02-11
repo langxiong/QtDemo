@@ -1,6 +1,7 @@
 #include <Poco/Util/Application.h>
 #include <Poco/Util/OptionSet.h>
 
+#include "common/config/ConfigPoco.h"
 #include "common/log/Log.h"
 #include "common/rt/DoubleBufferChannel.h"
 
@@ -25,7 +26,7 @@ protected:
   void initialize(Application& self) override {
     loadConfiguration();
     Application::initialize(self);
-    common::log::InitFromConfig(config(), this->commandName());
+    common::log::InitFromConfig(common::config::WrapPocoConfig(config()), this->commandName());
   }
 
   int main(const std::vector<std::string>& args) override {

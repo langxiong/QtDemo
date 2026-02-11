@@ -1,6 +1,7 @@
 #include <Poco/Util/ServerApplication.h>
 #include <Poco/Net/SocketAddress.h>
 
+#include "common/config/ConfigPoco.h"
 #include "common/fault/FaultInjector.h"
 #include "common/ipc/IpcServer.h"
 #include "common/ipc/Protocol.h"
@@ -49,7 +50,7 @@ protected:
   void initialize(Application& self) override {
     loadConfiguration();
     ServerApplication::initialize(self);
-    common::log::InitFromConfig(config(), this->commandName());
+    common::log::InitFromConfig(common::config::WrapPocoConfig(config()), this->commandName());
   }
 
   int main(const std::vector<std::string>& args) override {
@@ -59,7 +60,7 @@ protected:
     common::log::SetThreadName("main");
     common::log::Info("main", "algo_worker starting");
 
-    common::fault::FaultInjector fault(common::fault::FaultInjector::LoadFromConfig(config()));
+    common::fault::FaultInjector fault(common::fault::FaultInjector::LoadFromConfig(common::config::WrapPocoConfig(config())));
     fault.maybeCrashOnStart();
     fault.maybeHangOnStart();
 

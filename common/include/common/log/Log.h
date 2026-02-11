@@ -3,11 +3,9 @@
 #include <functional>
 #include <string>
 
-namespace Poco {
-namespace Util {
-class AbstractConfiguration;
+namespace common::config {
+class Config;
 }
-} // namespace Poco
 
 namespace common::log {
 
@@ -28,8 +26,8 @@ struct Context {
 
 void Init(const std::string& processName);
 
-/** Initialize logging from Poco configuration. Reads logging.pattern, logging.level, logging.channel, logging.file. */
-void InitFromConfig(Poco::Util::AbstractConfiguration& cfg, const std::string& loggerName);
+/** Initialize logging from configuration. Reads logging.pattern, logging.level, logging.channel, logging.file. */
+void InitFromConfig(const common::config::Config& cfg, const std::string& loggerName);
 
 void SetThreadName(const std::string& name);
 
