@@ -4,29 +4,41 @@
 
 namespace common::config {
 
+Config::Config(Poco::Util::AbstractConfiguration& cfg) : _wrapped(&cfg) {}
+
 bool Config::load(const std::string& path) {
-  _config = new Poco::Util::IniFileConfiguration(path);
-  return _config != nullptr;
+  _owned = new Poco::Util::IniFileConfiguration(path);
+  _wrapped = nullptr;
+  return _owned != nullptr;
+}
+
+const Poco::Util::AbstractConfiguration* Config::active() const {
+  if (_wrapped) return _wrapped;
+  return _owned.get();
 }
 
 std::string Config::getString(const std::string& key, const std::string& defaultValue) const {
-  if (!_config) return defaultValue;
-  return _config->getString(key, defaultValue);
+  auto* c = active();
+  if (!c) return defaultValue;
+  return c->getString(key, defaultValue);
 }
 
 int Config::getInt(const std::string& key, int defaultValue) const {
-  if (!_config) return defaultValue;
-  return _config->getInt(key, defaultValue);
+  auto* c = active();
+  if (!c) return defaultValue;
+  return c->getInt(key, defaultValue);
 }
 
 double Config::getDouble(const std::string& key, double defaultValue) const {
-  if (!_config) return defaultValue;
-  return _config->getDouble(key, defaultValue);
+  auto* c = active();
+  if (!c) return defaultValue;
+  return c->getDouble(key, defaultValue);
 }
 
 bool Config::getBool(const std::string& key, bool defaultValue) const {
-  if (!_config) return defaultValue;
-  return _config->getBool(key, defaultValue);
+  auto* c = active();
+  if (!c) return defaultValue;
+  return c->getBool(key, defaultValue);
 }
 
 } // namespace common::config

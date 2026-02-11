@@ -25,7 +25,7 @@ protected:
   void initialize(Application& self) override {
     loadConfiguration();
     Application::initialize(self);
-    common::log::Init(this->commandName());
+    common::log::InitFromConfig(config(), this->commandName());
   }
 
   int main(const std::vector<std::string>& args) override {

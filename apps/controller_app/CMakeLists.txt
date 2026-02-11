@@ -1,5 +1,9 @@
 add_executable(controller_app
   src/main.cpp
+  src/ControllerApp.cpp
+  src/ControllerApp.h
+  src/QtSubsystem.cpp
+  src/QtSubsystem.h
   src/DeviceSimulator.cpp
   src/DeviceSimulator.h
   src/DemoController.cpp
@@ -22,6 +26,7 @@ add_executable(controller_app
 target_link_libraries(controller_app
   PRIVATE
     common
+    Poco::Util
     Qt6::Widgets
     Qt6::Charts
 )

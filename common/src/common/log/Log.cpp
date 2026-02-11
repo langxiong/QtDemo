@@ -2,10 +2,12 @@
 
 #include <Poco/AutoPtr.h>
 #include <Poco/ConsoleChannel.h>
+#include <Poco/FileChannel.h>
 #include <Poco/FormattingChannel.h>
 #include <Poco/Logger.h>
 #include <Poco/PatternFormatter.h>
 #include <Poco/Thread.h>
+#include <Poco/Util/AbstractConfiguration.h>
 
 #include <mutex>
 #include <unordered_map>
@@ -25,6 +27,7 @@ std::string& ThreadNameSlot() {
 }
 
 void InitPocoLogger() {
+    if (gLogger != nullptr) return;  // Already configured by InitFromConfig
     Poco::AutoPtr<Poco::PatternFormatter> pf(new Poco::PatternFormatter);
     pf->setProperty("pattern", "%Y-%m-%d %H:%M:%S.%i [%p][%s] %t");
     pf->setProperty("times", "local");
@@ -73,6 +76,31 @@ std::string MakePrefix(const std::string& module) {
 void Init(const std::string& processName) {
   gProcessName = processName;
   (void)GetLogger(); // Eagerly initialize
+}
+
+void InitFromConfig(Poco::Util::AbstractConfiguration& cfg, const std::string& loggerName) {
+  gProcessName = loggerName;
+  const std::string pattern = cfg.getString("logging.pattern", "%Y-%m-%d %H:%M:%S.%i [%p][%s] %t");
+  const std::string level = cfg.getString("logging.level", "information");
+  const std::string channel = cfg.getString("logging.channel", "console");
+  const std::string filePath = cfg.getString("logging.file", "logs/app.log");
+
+  Poco::AutoPtr<Poco::PatternFormatter> pf(new Poco::PatternFormatter);
+  pf->setProperty("pattern", pattern);
+  pf->setProperty("times", "local");
+
+  Poco::AutoPtr<Poco::Channel> ch;
+  if (channel == "file") {
+    ch = new Poco::FileChannel(filePath);
+  } else {
+    ch = new Poco::ConsoleChannel;
+  }
+
+  Poco::AutoPtr<Poco::FormattingChannel> fc(new Poco::FormattingChannel(pf, ch));
+  Poco::Logger::root().setChannel(fc);
+  Poco::Logger::root().setLevel(level);
+
+  gLogger = &Poco::Logger::get(loggerName);
 }
 
 void SetThreadName(const std::string& name) {

@@ -3,6 +3,12 @@
 #include <functional>
 #include <string>
 
+namespace Poco {
+namespace Util {
+class AbstractConfiguration;
+}
+} // namespace Poco
+
 namespace common::log {
 
 enum class Level {
@@ -21,6 +27,10 @@ struct Context {
 };
 
 void Init(const std::string& processName);
+
+/** Initialize logging from Poco configuration. Reads logging.pattern, logging.level, logging.channel, logging.file. */
+void InitFromConfig(Poco::Util::AbstractConfiguration& cfg, const std::string& loggerName);
+
 void SetThreadName(const std::string& name);
 
 void Write(Level level, const std::string& module, const std::string& message);

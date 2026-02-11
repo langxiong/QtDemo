@@ -1,0 +1,19 @@
+# Text files: LF line endings, UTF-8 encoding (convention)
+*.cpp text eol=lf diff=cpp
+*.h text eol=lf diff=cpp
+*.ini text eol=lf
+*.ps1 text eol=lf
+*.sh text eol=lf
+*.md text eol=lf
+CMakeLists.txt text eol=lf
+*.cmake text eol=lf
+*.yaml text eol=lf
+*.in text eol=lf
+*.yml text eol=lf
+
+# Binary files: no normalization
+*.png binary
+*.ico binary
+*.dll binary
+*.exe binary
+*.lib binary
