@@ -2,6 +2,7 @@
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QLabel>
+#include <QMetaObject>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QWidget>
@@ -18,6 +19,8 @@
 #include "common/sensor/SensorPipeline.h"
 #include "common/status/Models.h"
 #include "common/status/StatusSnapshot.h"
+#include "DemoController.h"
+#include "MainWindow.h"
 
 #include <chrono>
 #include <string>
@@ -98,7 +101,20 @@ int main(int argc, char* argv[]) {
 
   auto* root = new QVBoxLayout(&window);
 
-  // Panels
+  // MVC: Demo View (control panel, position chart, log) + Controller
+  auto* demoView = new MainWindow(&window);
+  root->addWidget(demoView);
+  DemoController demoController(demoView);
+  const int simIntervalMs = 50;
+  demoController.startSimulationTimer(simIntervalMs);
+
+  // Forward common::log to UI via QueuedConnection (thread-safe)
+  common::log::SetSink([demoView](common::log::Level level, const std::string& module, const std::string& message) {
+    QString line = QString::fromStdString("[" + common::log::LevelToString(level) + "][" + module + "] " + message);
+    QMetaObject::invokeMethod(demoView, "appendLog", Qt::QueuedConnection, Q_ARG(QString, line));
+  });
+
+  // Legacy panels (StatusStore / sensor)
   auto* grpSignals = new QGroupBox("Signals", &window);
   auto* grpHealth = new QGroupBox("Process/Health", &window);
   auto* grpControl = new QGroupBox("Control/Actuator", &window);
@@ -209,6 +225,7 @@ int main(int argc, char* argv[]) {
 
   const int rc = app.exec();
 
+  demoController.stopSimulationTimer();
   timer.stop();
   runtime.stop();
   sensor.stop();

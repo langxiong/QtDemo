@@ -16,6 +16,8 @@ namespace {
 std::string gProcessName = "process";
 Poco::Logger* gLogger = nullptr;
 std::once_flag gOnceFlag;
+Sink gSink;
+std::mutex gSinkMu;
 
 std::string& ThreadNameSlot() {
   static thread_local std::string name;
@@ -77,9 +79,21 @@ void SetThreadName(const std::string& name) {
   ThreadNameSlot() = name;
 }
 
+void SetSink(Sink sink) {
+  std::lock_guard<std::mutex> lk(gSinkMu);
+  gSink = std::move(sink);
+}
+
 void Write(Level level, const std::string& module, const std::string& message) {
   auto& lg = GetLogger();
   lg.log(Poco::Message(lg.name(), MakePrefix(module) + message, ToPoco(level)));
+  Sink copy;
+  {
+    std::lock_guard<std::mutex> lk(gSinkMu);
+    copy = gSink;
+  }
+  if (copy)
+    copy(level, module, message);
 }
 
 void Trace(const std::string& module, const std::string& message) { Write(Level::Trace, module, message); }
