@@ -1,0 +1,6 @@
+struct JointState
+{
+    double position[6];
+    double velocity[6];
+    unsigned long long timestamp;
+};

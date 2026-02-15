@@ -1,0 +1,10 @@
+# Copy to config.local and edit for your machine:
+#   cp config.example config.local
+#   source config.local
+#
+# config.local is gitignored
+
+export QT_PREFIX="~/Qt/6.10.2/msvc2022_64"
+export POCO_PREFIX="~/Opt/Poco"
+export FASTDDS_ROOT="~/opt/fastdds"
+export FASTDDSGEN_IMG="fastddsgen-arch"

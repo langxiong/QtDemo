@@ -1,0 +1,5 @@
+struct ControlCommand
+{
+    double target_position[6];
+    unsigned long long timestamp;
+};

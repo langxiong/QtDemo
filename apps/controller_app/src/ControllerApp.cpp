@@ -18,7 +18,7 @@
 #include <QValueAxis>
 
 #include "common/config/ConfigPoco.h"
-#include "common/controller/ControllerRuntime.h"
+#include "ControllerRuntimeDds.h"
 #include "common/log/Log.h"
 #include "common/sensor/SensorPipeline.h"
 #include "common/status/Models.h"
@@ -90,7 +90,7 @@ int ControllerApp::main(const std::vector<std::string>& args) {
   sensor.start();
 
   common::status::StatusStore statusStore;
-  common::controller::ControllerRuntime runtime(cfg, sensor, statusStore, appDirPath);
+  controller_app::ControllerRuntimeDds runtime(cfg, sensor, statusStore, appDirPath);
   runtime.start();
 
   if (_verifyStartup) {

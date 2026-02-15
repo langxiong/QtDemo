@@ -1,0 +1,5 @@
+struct TestMsg
+{
+    long id;
+    string message;
+};

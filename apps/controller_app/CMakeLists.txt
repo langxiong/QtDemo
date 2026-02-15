@@ -1,4 +1,4 @@
-add_executable(controller_app
+set(controller_app_sources
   src/main.cpp
   src/ControllerApp.cpp
   src/ControllerApp.h
@@ -22,10 +22,16 @@ add_executable(controller_app
   src/ui/TelemetryChart.cpp
   src/ui/TelemetryChart.h
 )
+list(APPEND controller_app_sources
+  src/ControllerRuntimeDds.cpp
+  src/ControllerRuntimeDds.h
+)
+add_executable(controller_app ${controller_app_sources})
 
 target_link_libraries(controller_app
   PRIVATE
     common
+    dds_core
     Poco::Util
     Qt6::Widgets
     Qt6::Charts

@@ -10,7 +10,6 @@
 
 namespace common::controller {
 
-
 ControllerRuntime::ControllerRuntime(const common::config::Config& cfg,
                                      const common::sensor::SensorPipeline& sensor,
                                      common::status::StatusStore& status,
@@ -21,7 +20,7 @@ ControllerRuntime::ControllerRuntime(const common::config::Config& cfg,
           _ipcClient,
           Poco::Net::SocketAddress(cfg.getString("ipc.host", "127.0.0.1"), static_cast<Poco::UInt16>(cfg.getInt("ipc.port", 45678))),
           common::algo::AlgoProcessManager::Params{
-              Poco::Path(applicationDirPath).append("algo_worker.exe").toString(),
+              Poco::Path(applicationDirPath).append("algo_worker").toString(),
               std::chrono::milliseconds(cfg.getInt("ipc.heartbeat_timeout_ms", 500)),
               std::chrono::milliseconds(cfg.getInt("ipc.ready_timeout_ms", 10000)),
               std::chrono::milliseconds(cfg.getInt("ipc.restart_backoff_ms", 500)),

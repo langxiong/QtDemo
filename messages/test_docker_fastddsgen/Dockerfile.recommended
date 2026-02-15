@@ -1,0 +1,28 @@
+# Fast-DDS-Gen Docker 镜像 - 推荐配置
+# 放置到 ~/Docker/fastddsgen/ 替换原 Dockerfile
+
+FROM archlinux:latest
+
+# 更新系统并安装依赖（含 gradle，避免 gradlew 下载 502）
+RUN pacman -Syu --noconfirm && \
+    pacman -S --noconfirm \
+        jdk17-openjdk \
+        gradle \
+        git \
+        wget && \
+    pacman -Scc --noconfirm
+
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk
+ENV PATH=$JAVA_HOME/bin:$PATH
+
+# 克隆时初始化子模块（idl-parser 为必需依赖）
+RUN git clone --depth 1 --recurse-submodules \
+    https://github.com/eProsima/Fast-DDS-Gen.git /opt/fastddsgen
+
+WORKDIR /opt/fastddsgen
+
+# 构建（用系统 gradle 替代 gradlew，避免网络下载失败）
+RUN gradle assemble
+
+# 脚本位于 scripts/fastddsgen，会查找 ../share/fastddsgen/java/fastddsgen.jar
+ENTRYPOINT ["/opt/fastddsgen/scripts/fastddsgen"]

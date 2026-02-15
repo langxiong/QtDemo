@@ -1,0 +1,21 @@
+# Build outputs
+build/
+build-*/
+dist/
+dist-*/
+*.vcxproj
+*.sln
+CMakeCache.txt
+CMakeFiles/
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+
+# Misc
+*.log
+*~
