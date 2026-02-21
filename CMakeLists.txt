@@ -10,6 +10,11 @@ if(MSVC)
   # Force the correct multithreaded-DLL runtime library for all targets.
   # This ensures consistency with pre-built dependencies like Qt and Poco.
   set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+  # CEF libcef_dll_wrapper uses CEF_RUNTIME_LIBRARY_FLAG; keep in sync with project.
+  set(CEF_RUNTIME_LIBRARY_FLAG "/MD" CACHE STRING "CEF runtime (matches project)")
+  if(NOT CMAKE_MSVC_RUNTIME_LIBRARY MATCHES "DLL")
+    set(CEF_RUNTIME_LIBRARY_FLAG "/MT" CACHE STRING "CEF runtime (matches project)" FORCE)
+  endif()
 endif()
 
 option(MRCD_ENABLE_WARNINGS "Enable compiler warnings" ON)
@@ -52,6 +57,8 @@ if(MRCD_FASTDDS_ROOT)
   add_subdirectory(apps/monitor_node)
 endif()
 add_subdirectory(common)
+add_subdirectory(cef_api)
+add_subdirectory(apps/cef_host)
 add_subdirectory(apps/controller_app)
 add_subdirectory(apps/algo_worker)
 add_subdirectory(apps/stress_test)
@@ -66,6 +73,13 @@ install(FILES
   DESTINATION bin
 )
 install(FILES config/monitor_node.ini DESTINATION bin)
+
+# Frontend build (npm run build) - run manually: cd frontend && npm run build
+add_custom_target(frontend_build
+  COMMAND npm run build
+  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/frontend
+  COMMENT "Building React frontend"
+)
 
 # Windows: deploy Qt runtime + Poco runtime into the install bin folder
 if(WIN32)
