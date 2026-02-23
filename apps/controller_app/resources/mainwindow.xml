@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window size="800,600" caption="0,0,0,30" roundcorner="0,0" mininfo="400,300">
+  <VerticalLayout inset="0,0,0,0" />
+</Window>

@@ -1,0 +1,43 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": { "major": 3, "minor": 16 },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "cacheVariables": {
+        "MRCD_USE_DEPS_SUBMODULES": "ON",
+        "MRCD_FETCH_CEF": "ON"
+      }
+    },
+    {
+      "name": "build_debug",
+      "displayName": "Debug (root-level)",
+      "inherits": "base",
+      "binaryDir": "${sourceDir}/../build_debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "build_release",
+      "displayName": "Release (root-level)",
+      "inherits": "base",
+      "binaryDir": "${sourceDir}/../build_release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "build_debug",
+      "configurePreset": "build_debug"
+    },
+    {
+      "name": "build_release",
+      "configurePreset": "build_release"
+    }
+  ]
+}

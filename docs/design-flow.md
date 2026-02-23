@@ -3,34 +3,36 @@
 ## 1. Process & IPC overview
 
 ```mermaid
-flowchart LR
-  subgraph Controller["controller_app"]
-    UI[Qt UI / Main]
-    RT[ControllerRuntime]
-    CL[ControlLoop]
-    HB[HeartbeatMonitor]
-    PM[AlgoProcessManager]
-    SP[SensorPipeline]
-    SS[StatusStore]
-    UI --> RT
-    RT --> PM
-    RT --> HB
-    RT --> CL
-    RT --> SS
-    CL --> SP
-    CL --> SS
-    SP --> SS
-    HB --> SS
+flowchart TB
+  subgraph CefHost["cef_host"]
+    CEF[CEF Browser - SetAsPopup]
+    ApiBridge[APIInterface]
+    IpcClient[IPC Client]
+    CEF --> ApiBridge
+    ApiBridge --> IpcClient
+  end
+
+  subgraph Controller["controller_app (headless)"]
+    IpcServer[IPC Server]
+    Sensor[SensorPipeline]
+    Runtime[ControllerRuntimeDds]
+    Device[DeviceSimulator]
+    Status[StatusStore]
+    IpcServer --> Sensor
+    IpcServer --> Runtime
+    IpcServer --> Device
+    IpcServer --> Status
   end
 
   subgraph Algo["algo_worker"]
     Main[main loop]
-    Srv[IpcServer]
+    Srv[Algo IpcServer]
     Main --> Srv
   end
 
-  PM -.->|launch + stdout pipe ready byte| Algo
-  RT <-->|TCP: sensor frames, ping/pong, algo results| Srv
+  IpcClient <-->|"JSON over TCP :9123"| IpcServer
+  Controller -.->|launch + stdout pipe ready byte| Algo
+  Runtime <-->|TCP: sensor frames, ping/pong, algo results| Srv
 ```
 
 ## 2. Controller process — threads & data flow

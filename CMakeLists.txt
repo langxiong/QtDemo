@@ -1,5 +1,27 @@
 cmake_minimum_required(VERSION 3.16)
 
+# Initialize git submodules (deps) so they are available for building
+find_package(Git QUIET)
+if(GIT_FOUND)
+  get_filename_component(_git_root "${CMAKE_SOURCE_DIR}" DIRECTORY)
+  set(_submod_dir "")
+  if(EXISTS "${CMAKE_SOURCE_DIR}/.git")
+    set(_submod_dir "${CMAKE_SOURCE_DIR}")
+  elseif(EXISTS "${_git_root}/.git")
+    set(_submod_dir "${_git_root}")
+  endif()
+  if(_submod_dir)
+    execute_process(
+      COMMAND ${GIT_EXECUTABLE} submodule update --init --recursive
+      WORKING_DIRECTORY ${_submod_dir}
+      RESULT_VARIABLE GIT_SUBMOD_RESULT
+    )
+    if(NOT GIT_SUBMOD_RESULT EQUAL "0")
+      message(WARNING "git submodule update failed (code ${GIT_SUBMOD_RESULT}), deps may be missing")
+    endif()
+  endif()
+endif()
+
 project(medical_robot_control_demo LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -7,6 +29,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 if(MSVC)
+  add_compile_options(/utf-8)  # Avoid C4819 on CP936 (Chinese) systems
   # Force the correct multithreaded-DLL runtime library for all targets.
   # This ensures consistency with pre-built dependencies like Qt and Poco.
   set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
@@ -31,21 +54,84 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
-# Qt
-set(CMAKE_AUTOMOC ON)
-set(CMAKE_AUTOUIC ON)
-set(CMAKE_AUTORCC ON)
+# Option: use deps from submodules (demo/deps) or system/vcpkg
+option(MRCD_USE_DEPS_SUBMODULES "Build and use Poco/Fast-DDS from demo/deps submodules" OFF)
+option(MRCD_FETCH_CEF "Fetch CEF prebuilt when bootstrapping deps (requires Python 3)" ON)
+set(MRCD_FASTDDS_ROOT "" CACHE PATH "Fast DDS install prefix. Required unless MRCD_USE_DEPS_SUBMODULES=ON.")
 
-find_package(Qt6 REQUIRED COMPONENTS Widgets Charts)
-qt_standard_project_setup()
+set(DEPS_INSTALL_BASE "${CMAKE_SOURCE_DIR}/deps/install")
 
-# Poco
-find_package(Poco REQUIRED COMPONENTS Foundation Util Net)
+if(MRCD_USE_DEPS_SUBMODULES)
+  # Single-config only: build deps for current CMAKE_BUILD_TYPE, install to install/Debug or install/Release
+  # Use build_debug/build_release at project root for compatibility with vcpkg/Conan
+  set(_deps_build "${CMAKE_BINARY_DIR}/deps_build")
+  set(_cfg ${CMAKE_BUILD_TYPE})
+  if(NOT _cfg)
+    set(_cfg "Release")
+  endif()
+  set(_deps_install_prefix "${DEPS_INSTALL_BASE}/${_cfg}")
+  set(_deps_marker "${_deps_install_prefix}/.deps_built")
+  if(NOT EXISTS "${_deps_marker}")
+    message(STATUS "Building deps for ${_cfg} (first-time setup)...")
+    set(_deps_cfg_args
+      -B ${_deps_build}_${_cfg} -S ${CMAKE_SOURCE_DIR}/deps
+      -DCMAKE_INSTALL_PREFIX=${_deps_install_prefix}
+      -DDEPS_INSTALL_CONFIG=${_cfg}
+      -DCMAKE_BUILD_TYPE=${_cfg}
+    )
+    if(CMAKE_TOOLCHAIN_FILE)
+      list(APPEND _deps_cfg_args -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE})
+    endif()
+    execute_process(COMMAND ${CMAKE_COMMAND} ${_deps_cfg_args} RESULT_VARIABLE _rc1)
+    if(NOT _rc1 EQUAL 0)
+      message(FATAL_ERROR "Deps configure for ${_cfg} failed. Run: git submodule update --init --recursive")
+    endif()
+    execute_process(COMMAND ${CMAKE_COMMAND} --build ${_deps_build}_${_cfg} --config ${_cfg} RESULT_VARIABLE _rc2)
+    if(NOT _rc2 EQUAL 0)
+      message(FATAL_ERROR "Deps build for ${_cfg} failed")
+    endif()
+    execute_process(COMMAND ${CMAKE_COMMAND} --install ${_deps_build}_${_cfg} --config ${_cfg} --prefix ${_deps_install_prefix} RESULT_VARIABLE _rc3)
+    if(NOT _rc3 EQUAL 0)
+      message(FATAL_ERROR "Deps install for ${_cfg} failed")
+    endif()
+    file(WRITE "${_deps_marker}" "")
+    message(STATUS "Deps built and installed to ${_deps_install_prefix}")
+  endif()
+  if(MRCD_FETCH_CEF AND NOT MRCD_CEF_ROOT)
+    file(GLOB _cef_existing "${CMAKE_SOURCE_DIR}/prebuilt/cef/cef_binary_*_windows64")
+    if(NOT _cef_existing)
+      find_package(Python3 QUIET COMPONENTS Interpreter)
+      if(Python3_Interpreter_FOUND)
+        execute_process(COMMAND ${Python3_EXECUTABLE} "${CMAKE_SOURCE_DIR}/scripts/fetch_cef.py"
+          WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+          RESULT_VARIABLE _cef_rc)
+        if(NOT _cef_rc EQUAL 0)
+          message(WARNING "CEF fetch failed (code ${_cef_rc}). Run: python demo/scripts/fetch_cef.py")
+        endif()
+      else()
+        message(STATUS "Python3 not found; skip CEF fetch. Run: python demo/scripts/fetch_cef.py")
+      endif()
+    endif()
+  endif()
+  list(PREPEND CMAKE_PREFIX_PATH ${_deps_install_prefix})
+  set(MRCD_FASTDDS_ROOT "${_deps_install_prefix}" CACHE PATH "Fast DDS from deps" FORCE)
+  if(WIN32)
+    set(MRCD_DUILIB_ROOT "${_deps_install_prefix}" CACHE PATH "DuiLib from deps" FORCE)
+  endif()
+endif()
 
-# Fast DDS (not vcpkg: use install path; see docs/FASTDDS_SETUP.md)
-set(MRCD_FASTDDS_ROOT "" CACHE PATH "Fast DDS install prefix (e.g. C:/Opt/fastdds). Required.")
+set(MRCD_DUILIB_ROOT "" CACHE PATH "DuiLib install prefix. When set, controller_app uses DuiLib MainWindow.")
+
+# Poco (from deps or system/vcpkg). Explicit version avoids ConfigVersion rejecting empty PACKAGE_FIND_VERSION.
+find_package(Poco 1.10 REQUIRED COMPONENTS Foundation Util Net)
+
+# Fast DDS (from deps or MRCD_FASTDDS_ROOT; see docs/FASTDDS_SETUP.md)
 set(MRCD_FASTDDSGEN "" CACHE FILEPATH "Path to fastddsgen (or fastddsgen.bat). Set if not under MRCD_FASTDDS_ROOT/bin or in PATH.")
-set(MRCD_FASTDDSGEN_DOCKER_IMAGE "" CACHE STRING "Docker image for fastddsgen (e.g. fastddsgen-arch). When set, IDL generation uses 'docker run' instead of native fastddsgen.")
+set(MRCD_FASTDDSGEN_DOCKER_IMAGE "" CACHE STRING "Docker image for fastddsgen (e.g. fastddsgen-mrcd). When set, IDL generation uses 'docker run' instead of native fastddsgen.")
+# When using deps, default to Docker fastddsgen if neither native nor image specified
+if(MRCD_USE_DEPS_SUBMODULES AND MRCD_FASTDDS_ROOT AND NOT MRCD_FASTDDSGEN AND NOT MRCD_FASTDDSGEN_DOCKER_IMAGE)
+  set(MRCD_FASTDDSGEN_DOCKER_IMAGE "fastddsgen-mrcd" CACHE STRING "Docker image for fastddsgen" FORCE)
+endif()
 if(MRCD_FASTDDS_ROOT)
   list(APPEND CMAKE_PREFIX_PATH ${MRCD_FASTDDS_ROOT})
   set(fastdds_DIR "${MRCD_FASTDDS_ROOT}/share/fastdds/cmake" CACHE PATH "Fast DDS CMake config dir")
@@ -56,6 +142,18 @@ if(MRCD_FASTDDS_ROOT)
   add_subdirectory(dds_core)
   add_subdirectory(apps/monitor_node)
 endif()
+
+# CEF prebuilt: auto-detect from demo/prebuilt/cef when MRCD_CEF_ROOT not set
+set(MRCD_PREBUILT_ROOT "${CMAKE_SOURCE_DIR}/prebuilt")
+if(NOT MRCD_CEF_ROOT AND EXISTS "${MRCD_PREBUILT_ROOT}/cef")
+  file(GLOB _cef_dirs "${MRCD_PREBUILT_ROOT}/cef/cef_binary_*_windows64")
+  if(_cef_dirs)
+    list(GET _cef_dirs 0 _cef_root)
+    set(MRCD_CEF_ROOT "${_cef_root}" CACHE PATH "CEF from prebuilt" FORCE)
+    message(STATUS "MRCD_CEF_ROOT auto-detected: ${MRCD_CEF_ROOT}")
+  endif()
+endif()
+
 add_subdirectory(common)
 add_subdirectory(cef_api)
 add_subdirectory(apps/cef_host)
@@ -81,22 +179,8 @@ add_custom_target(frontend_build
   COMMENT "Building React frontend"
 )
 
-# Windows: deploy Qt runtime + Poco runtime into the install bin folder
+# Windows: deploy Poco runtime (and Fast DDS) into the install bin folder
 if(WIN32)
-  set(MRCD_WINDEPLOYQT "" CACHE FILEPATH "Path to windeployqt.exe (Qt6).")
-  if(NOT MRCD_WINDEPLOYQT)
-    find_program(MRCD_WINDEPLOYQT NAMES windeployqt windeployqt.exe)
-  endif()
-  if(NOT MRCD_WINDEPLOYQT AND Qt6_DIR)
-    get_filename_component(_qt_cmake "${Qt6_DIR}" DIRECTORY)
-    get_filename_component(_qt_lib "${_qt_cmake}" DIRECTORY)
-    get_filename_component(_qt_prefix "${_qt_lib}" DIRECTORY)
-    set(_qt_windeployqt "${_qt_prefix}/bin/windeployqt.exe")
-    if(EXISTS "${_qt_windeployqt}")
-      set(MRCD_WINDEPLOYQT "${_qt_windeployqt}" CACHE FILEPATH "Path to windeployqt.exe (auto from Qt6)" FORCE)
-    endif()
-  endif()
-
   set(MRCD_POCO_PREFIX "" CACHE PATH "Poco install prefix (e.g. C:/Users/Zoom/Opt/Poco).")
   if(NOT MRCD_POCO_PREFIX AND Poco_DIR)
     get_filename_component(_poco_parent "${Poco_DIR}" DIRECTORY)
@@ -111,26 +195,12 @@ if(WIN32)
   endif()
 
   # Bake cache values at configure time (install script cannot read $CACHE{} at install time)
-  set(_install_windeployqt "${MRCD_WINDEPLOYQT}")
   set(_install_poco_prefix "${MRCD_POCO_PREFIX}")
   set(_install_fastdds_root "${MRCD_FASTDDS_ROOT}")
   set(_install_prefix "${CMAKE_INSTALL_PREFIX}")
   install(CODE "
-set(MRCD_WINDEPLOYQT \"${_install_windeployqt}\")
 set(MRCD_POCO_PREFIX \"${_install_poco_prefix}\")
 set(MRCD_FASTDDS_ROOT \"${_install_fastdds_root}\")
-if(NOT MRCD_WINDEPLOYQT)
-  message(WARNING \"MRCD_WINDEPLOYQT not found; Qt DLLs/plugins will not be deployed. Set -DMRCD_WINDEPLOYQT=.../windeployqt.exe\")
-else()
-  message(STATUS \"Running windeployqt: \${MRCD_WINDEPLOYQT}\")
-  execute_process(
-    COMMAND \"\${MRCD_WINDEPLOYQT}\" --no-translations --no-compiler-runtime \"${_install_prefix}/bin/controller_app.exe\"
-    RESULT_VARIABLE _windeployqt_rc
-  )
-  if(NOT _windeployqt_rc EQUAL 0)
-    message(FATAL_ERROR \"windeployqt failed with code \${_windeployqt_rc}\")
-  endif()
-endif()
 if(MRCD_POCO_PREFIX)
   set(_poco_bin \"\${MRCD_POCO_PREFIX}/bin\")
   message(STATUS \"Deploying Poco DLLs from: \${_poco_bin}\")

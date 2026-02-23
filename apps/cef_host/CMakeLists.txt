@@ -1,6 +1,7 @@
 # cef_host: CEF host for React UI.
 # Set MRCD_CEF_ROOT to CEF binary distribution root (e.g. cef_binary_* from cef-builds.spotifycdn.com).
 # See demo/docs/CEF_REACT_SETUP.md for CEF build and link instructions.
+# Uses native popup window. DuiLib host window belongs to controller_app, not cef_host.
 
 set(MRCD_CEF_ROOT "" CACHE PATH "CEF binary distribution root")
 
@@ -16,12 +17,16 @@ if(MRCD_CEF_ROOT)
     set(CEF_ROOT "${MRCD_CEF_ROOT}" CACHE PATH "CEF root" FORCE)
     list(APPEND CMAKE_MODULE_PATH "${MRCD_CEF_ROOT}/cmake")
     find_package(CEF REQUIRED)
+    # CEF prebuilt from CDN is Release-only; fallback so libcef_lib works for Debug builds
+    if((NOT CEF_LIB_DEBUG OR NOT EXISTS "${CEF_LIB_DEBUG}") AND CEF_LIB_RELEASE AND EXISTS "${CEF_LIB_RELEASE}")
+      set(CEF_LIB_DEBUG "${CEF_LIB_RELEASE}")
+    endif()
   endif()
 endif()
 
 set(CEF_HOST_SOURCES)
 if(_CEF_LIBCEF_DLL)
-  if(OS_WINDOWS)
+  if(WIN32)
     list(APPEND CEF_HOST_SOURCES src/main_win.cc)
   else()
     list(APPEND CEF_HOST_SOURCES src/main.cpp)
@@ -30,6 +35,7 @@ if(_CEF_LIBCEF_DLL)
     src/cef_host_app.cpp
     src/cef_render_handler.cpp
     src/api_v8_handler.cpp
+    src/CefHostApplication.cpp
   )
   ADD_LOGICAL_TARGET("libcef_lib" "${CEF_LIB_DEBUG}" "${CEF_LIB_RELEASE}")
   add_subdirectory(${_CEF_LIBCEF_DLL} ${CMAKE_BINARY_DIR}/cef_host_libcef_dll)
@@ -46,6 +52,7 @@ endif()
 target_include_directories(cef_host
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 if(_CEF_LIBCEF_DLL)
   target_include_directories(cef_host PRIVATE "${MRCD_CEF_ROOT}")
@@ -56,6 +63,7 @@ if(_CEF_LIBCEF_DLL)
       cef_api
       common
       Poco::Foundation
+      Poco::Util
   )
   target_compile_definitions(cef_host PRIVATE HAVE_CEF=1 NOMINMAX)
   target_compile_features(cef_host PRIVATE cxx_std_20)  # CEF 145+ requires C++20

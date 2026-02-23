@@ -1,0 +1,12 @@
+[submodule "deps/poco"]
+	path = deps/poco
+	url = https://github.com/pocoproject/poco.git
+[submodule "deps/foonathan_memory_vendor"]
+	path = deps/foonathan_memory_vendor
+	url = https://github.com/eProsima/foonathan_memory_vendor.git
+[submodule "deps/fastcdr"]
+	path = deps/fastcdr
+	url = https://github.com/eProsima/Fast-CDR.git
+[submodule "deps/fastdds"]
+	path = deps/fastdds
+	url = https://github.com/eProsima/Fast-DDS.git

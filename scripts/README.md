@@ -5,16 +5,15 @@
 ## 前置条件
 
 - CMake 3.16+
-- Qt6、Poco、Fast DDS 已安装（启用 DDS 时）
+- Poco、Fast DDS 已安装（启用 DDS 时）
 - Windows: Visual Studio 2022 (msvc)
-- Linux: gcc/clang, Qt6, Poco 包
+- Linux: gcc/clang, Poco 包
 
 ## 环境变量
 
 在运行脚本前可设置（或复制为 `config.local` 后 `source`）：
 
 ```bash
-export QT_PREFIX="~/Qt/6.10.2/msvc2022_64"       # Qt6 安装目录
 export POCO_PREFIX="~/Opt/Poco"                  # Poco 安装目录
 export FASTDDS_ROOT="~/opt/fastdds"              # Fast DDS 安装目录
 export FASTDDSGEN_IMG="fastddsgen-arch"          # fastddsgen Docker 镜像

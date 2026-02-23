@@ -5,10 +5,10 @@
 
 namespace {
 constexpr double kProportionalGain = 2.0;
-constexpr double kSensorNoiseAmplitude = 0.05;  // 稍大以便图表可见波动
-} // namespace
+constexpr double kSensorNoiseAmplitude = 0.05;
+}  // namespace
 
-DeviceSimulator::DeviceSimulator(QObject* parent) : QObject(parent) {}
+DeviceSimulator::DeviceSimulator() = default;
 
 void DeviceSimulator::setTarget(double positionOrVelocity) {
   _targetPosition = positionOrVelocity;
@@ -17,13 +17,13 @@ void DeviceSimulator::setTarget(double positionOrVelocity) {
 void DeviceSimulator::start() {
   if (_running) return;
   _running = true;
-  emit started();
+  if (_onStarted) _onStarted();
 }
 
 void DeviceSimulator::stop() {
   if (!_running) return;
   _running = false;
-  emit stopped();
+  if (_onStopped) _onStopped();
 }
 
 common::device::DeviceSnapshot DeviceSimulator::latestSnapshot() const {
@@ -38,8 +38,9 @@ void DeviceSimulator::step(double dtSeconds) {
   _position += _velocity * dtSeconds;
 
   _rng = _rng * 1103515245u + 12345u;
-  const double noise = (static_cast<double>(_rng % 65536) / 65536.0 - 0.5) * 2.0 * kSensorNoiseAmplitude;
+  const double noise =
+      (static_cast<double>(_rng % 65536) / 65536.0 - 0.5) * 2.0 * kSensorNoiseAmplitude;
   _sensorValue = _position + noise;
 
-  emit stateUpdated(_position, _velocity, _sensorValue);
+  if (_onStateUpdated) _onStateUpdated(_position, _velocity, _sensorValue);
 }

@@ -5,7 +5,6 @@
 #   --release: CMAKE_BUILD_TYPE=Release, build dir=build, install=dist (default)
 #
 # Environment (override as needed):
-#   QT_PREFIX       - Qt6 install prefix (e.g. ~/Qt/6.10.2/msvc2022_64)
 #   POCO_PREFIX     - Poco install prefix (e.g. ~/Opt/Poco)
 #   FASTDDS_ROOT    - Fast DDS install prefix (e.g. ~/opt/fastdds)
 #   FASTDDSGEN_IMG  - Docker image for fastddsgen (e.g. fastddsgen-arch)
@@ -40,15 +39,13 @@ to_win_path() {
 }
 
 # Defaults (edit for your machine)
-QT_PREFIX="${QT_PREFIX:-}"
 POCO_PREFIX="${POCO_PREFIX:-}"
 FASTDDS_ROOT="${FASTDDS_ROOT:-}"
 FASTDDSGEN_IMG="${FASTDDSGEN_IMG:-fastddsgen-arch}"
 
 # Build CMAKE_PREFIX_PATH
 CMAKE_PREFIX_PATH=""
-[[ -n "$QT_PREFIX" ]] && CMAKE_PREFIX_PATH="$QT_PREFIX"
-[[ -n "$POCO_PREFIX" ]] && CMAKE_PREFIX_PATH="${CMAKE_PREFIX_PATH:+$CMAKE_PREFIX_PATH;}${POCO_PREFIX}"
+[[ -n "$POCO_PREFIX" ]] && CMAKE_PREFIX_PATH="$POCO_PREFIX"
 [[ -n "$FASTDDS_ROOT" ]] && CMAKE_PREFIX_PATH="${CMAKE_PREFIX_PATH:+$CMAKE_PREFIX_PATH;}${FASTDDS_ROOT}"
 
 # Build args
@@ -74,9 +71,6 @@ fi
 
 [[ -n "$POCO_PREFIX" ]] && CMAKE_ARGS+=(-DMRCD_POCO_PREFIX="$POCO_PREFIX")
 [[ -n "$FASTDDS_ROOT" ]] && CMAKE_ARGS+=(-DMRCD_FASTDDS_ROOT="$FASTDDS_ROOT" -DMRCD_FASTDDSGEN_DOCKER_IMAGE="$FASTDDSGEN_IMG")
-if [[ -n "$QT_PREFIX" ]] && [[ -f "$QT_PREFIX/bin/windeployqt.exe" ]] 2>/dev/null; then
-  CMAKE_ARGS+=(-DMRCD_WINDEPLOYQT="$QT_PREFIX/bin/windeployqt.exe")
-fi
 
 echo "=== Build ($MODE) ==="
 echo "  Build dir: $BUILD_DIR"

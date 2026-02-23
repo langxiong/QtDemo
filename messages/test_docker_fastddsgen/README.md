@@ -5,21 +5,14 @@
 ## 依赖
 
 - Docker
-- 已构建的 fastddsgen 镜像，例如 `fastddsgen-arch`
+- 已构建的 fastddsgen 镜像，例如 `fastddsgen-mrcd`
 
-## 运行 (Git Bash)
+## 运行
 
 ```bash
 cd demo/messages/test_docker_fastddsgen
 chmod +x run_test.sh
-./run_test.sh fastddsgen-arch
-```
-
-## 运行 (cmd / PowerShell)
-
-```cmd
-cd demo\messages\test_docker_fastddsgen
-run_test.bat fastddsgen-arch
+./run_test.sh fastddsgen-mrcd
 ```
 
 ## 预期输出

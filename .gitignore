@@ -4,6 +4,10 @@ build-*/
 dist/
 dist-*/
 scripts/config.local
+deps/install/
+prebuilt/
+# duilib: clone manually: git clone https://github.com/qdtroy/DuiLib_Ultimate.git demo/deps/duilib
+deps/duilib/
 
 # CMake user presets
 CMakeUserPresets.json

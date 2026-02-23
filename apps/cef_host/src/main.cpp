@@ -2,12 +2,15 @@
  * cef_host: CEF host for React UI.
  * With MRCD_CEF_ROOT: full CEF init, browser window, window.api bridge.
  * Without: stub, prints setup instructions.
+ * Set MRCD_CONTROLLER_IPC_ADDR=127.0.0.1:9123 to use controller_app as API backend.
  */
 #include "cef_api/APIInterface.hpp"
+#include "cef_api/IpcBackend.hpp"
 #include "common/log/Log.h"
 #include <iostream>
 #include <memory>
 #include <string>
+#include <cstdlib>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -19,6 +22,24 @@
 #include <include/cef_command_line.h>
 #include <include/cef_sandbox_win.h>
 #endif
+
+static std::shared_ptr<cef_api::APIInterface> createApiInterface() {
+  auto api = std::make_shared<cef_api::APIInterface>();
+  const char* addr = std::getenv("MRCD_CONTROLLER_IPC_ADDR");
+  if (!addr) addr = std::getenv("CONTROLLER_IPC_ADDR");
+  if (addr && addr[0]) {
+    std::string s(addr);
+    size_t colon = s.find(':');
+    std::string host = (colon != std::string::npos) ? s.substr(0, colon) : "127.0.0.1";
+    int port = (colon != std::string::npos) ? std::stoi(s.substr(colon + 1)) : 9123;
+    auto backend = cef_api::IpcBackend::create(host, port);
+    if (backend) {
+      api->setBackend([b = std::move(backend)](const std::string& req) { return b->process(req); });
+      common::log::Info("cef_host", "IPC backend connected to " + host + ":" + std::to_string(port));
+    }
+  }
+  return api;
+}
 
 int main(int argc, char* argv[]) {
   (void)argc;
@@ -33,7 +54,7 @@ int main(int argc, char* argv[]) {
   main_args = CefMainArgs(argc, argv);
 #endif
 
-  CefRefPtr<cef_host::CefHostApp> app(new cef_host::CefHostApp(std::make_shared<cef_api::APIInterface>()));
+  CefRefPtr<cef_host::CefHostApp> app(new cef_host::CefHostApp(createApiInterface()));
   int exit_code = CefExecuteProcess(main_args, app, nullptr);
   if (exit_code >= 0) return exit_code;
 

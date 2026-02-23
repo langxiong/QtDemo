@@ -22,6 +22,7 @@ target_sources(cef_api
     src/ApplicationHandler.cpp
     src/StreamHandler.cpp
     src/APIInterface.cpp
+    src/IpcBackend.cpp
 )
 
 target_include_directories(cef_api
@@ -34,6 +35,7 @@ target_link_libraries(cef_api
     nlohmann_json::nlohmann_json
   PRIVATE
     common
+    Poco::Net
 )
 
 target_compile_features(cef_api PUBLIC cxx_std_17)

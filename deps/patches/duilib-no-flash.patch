@@ -1,0 +1,9 @@
+--- a/DuiLib/UIlib.h
++++ b/DuiLib/UIlib.h
+@@ -100,5 +100,5 @@
+ #include "Control/UIActiveX.h"
+ #include "Control/UIWebBrowser.h"
+-#include "Control/UIFlash.h"
++/* #include "Control/UIFlash.h" */  /* Excluded: flash11.tlh unavailable (Flash deprecated) */
+ 
+ #include "Control/UIMenu.h"

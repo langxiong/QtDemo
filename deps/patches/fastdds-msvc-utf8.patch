@@ -1,0 +1,9 @@
+--- CMakeLists.txt
++++ CMakeLists.txt
+@@ -65,6 +65,7 @@ if(MSVC OR MSVC_IDE)
+     add_compile_options(/w34101 /w34189 /w34555 /w34715 /w35038 /w44100 /bigobj)
+ 
++    add_compile_options(/utf-8 /WX-)
+     if(EPROSIMA_BUILD)
+         string(REPLACE "/DNDEBUG" "" CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO}")
+     endif()

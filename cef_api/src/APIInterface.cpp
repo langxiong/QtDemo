@@ -8,6 +8,10 @@ APIInterface::APIInterface()
     : appHandler_(std::make_unique<ApplicationHandler>()),
       streamHandler_(std::make_unique<StreamHandler>()) {}
 
+void APIInterface::setBackend(std::function<std::string(const std::string&)> backend) {
+  backend_ = std::move(backend);
+}
+
 void APIInterface::addHandler(HandlerFn handler) {
   handlers_.push_back(std::move(handler));
 }
@@ -25,8 +29,24 @@ std::string APIInterface::process(const std::string& requestJson) {
     const auto j = nlohmann::json::parse(requestJson);
     const std::string type = j.value("type", "");
     const std::string method = j.value("method", "");
-    const auto params = j.value("params", nlohmann::json::object());
 
+    if (backend_) {
+      std::string resp = backend_(requestJson);
+      if (!resp.empty()) {
+        for (const auto& obs : observers_) {
+          try {
+            const auto params = j.value("params", nlohmann::json::object());
+            obs(type, method, params, resp);
+          } catch (const std::exception& e) {
+            common::log::Error("cef_api", std::string("APIInterface observer: ") + e.what());
+          }
+        }
+        if (type == "notify") return {};
+        return resp;
+      }
+    }
+
+    const auto params = j.value("params", nlohmann::json::object());
     std::string result = route(method, params);
 
     // Notify observers (for both call and notify)

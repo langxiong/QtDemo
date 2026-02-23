@@ -1,53 +1,54 @@
 // Windows entry point for cef_host (CEF mode).
 // Uses wWinMain for WIN32 subsystem; CEF runs in main process.
+// Integrates Poco::Util::Application for --parent-hwnd parsing.
 
-#include "cef_host/cef_host_app.hpp"
-#include "common/log/Log.h"
-#include <include/cef_app.h>
-#include <include/cef_command_line.h>
-#include <include/cef_sandbox_win.h>
+#include "CefHostApplication.hpp"
 #include <windows.h>
+#include <shellapi.h>
+#include <string>
+#include <vector>
 
-int RunMain(HINSTANCE hInstance, LPTSTR lpCmdLine, int nCmdShow, void* sandbox_info) {
-  (void)lpCmdLine;
-  (void)nCmdShow;
-
-  common::log::Init("cef_host");
-
-  CefMainArgs main_args(hInstance);
-
-  CefRefPtr<cef_host::CefHostApp> app(new cef_host::CefHostApp(std::make_shared<cef_api::APIInterface>()));
-  int exit_code = CefExecuteProcess(main_args, app, sandbox_info);
-  if (exit_code >= 0) return exit_code;
-
-  CefRefPtr<CefCommandLine> cmd = CefCommandLine::CreateCommandLine();
-  cmd->InitFromString(::GetCommandLineW());
-
-  CefSettings settings;
-  settings.windowless_rendering_enabled = 0;
-  settings.multi_threaded_message_loop = 0;
-  settings.external_message_pump = 0;
-  settings.no_sandbox = (sandbox_info == nullptr);
-
-  if (!CefInitialize(main_args, settings, app, sandbox_info)) {
-    common::log::Error("cef_host", "CefInitialize failed");
-    return CefGetExitCode();
-  }
-
-  common::log::Info("cef_host", "CEF running. Start frontend: cd demo/frontend && npm run dev");
-
-  CefRunMessageLoop();
-  CefShutdown();
-
-  return 0;
+static std::string wideToUtf8(const wchar_t* wstr) {
+  if (!wstr || !*wstr) return {};
+  int len = WideCharToMultiByte(CP_UTF8, 0, wstr, -1, nullptr, 0, nullptr, nullptr);
+  if (len <= 0) return {};
+  std::string result(static_cast<size_t>(len), '\0');
+  WideCharToMultiByte(CP_UTF8, 0, wstr, -1, &result[0], len, nullptr, nullptr);
+  result.resize(result.find('\0'));
+  return result;
 }
 
 int APIENTRY wWinMain(HINSTANCE hInstance,
                      HINSTANCE hPrevInstance,
                      LPTSTR lpCmdLine,
                      int nCmdShow) {
+  (void)hInstance;
   (void)hPrevInstance;
+  (void)lpCmdLine;
+  (void)nCmdShow;
 
-  void* sandbox_info = nullptr;
-  return RunMain(hInstance, lpCmdLine, nCmdShow, sandbox_info);
+  int argc = 0;
+  LPWSTR* wargv = CommandLineToArgvW(GetCommandLineW(), &argc);
+  std::vector<std::string> argStrings;
+  if (wargv && argc > 0) {
+    argStrings.reserve(static_cast<size_t>(argc));
+    for (int i = 0; i < argc; ++i) {
+      argStrings.push_back(wideToUtf8(wargv[i]));
+    }
+    LocalFree(wargv);
+  } else {
+    argStrings.push_back("cef_host");
+    argc = 1;
+  }
+
+  std::vector<char*> argvPtrs;
+  argvPtrs.reserve(static_cast<size_t>(argc) + 1);
+  for (auto& s : argStrings) {
+    argvPtrs.push_back(&s[0]);
+  }
+  argvPtrs.push_back(nullptr);
+
+  CefHostApplication app;
+  app.init(argc, argvPtrs.data());
+  return app.run(argc, argvPtrs.data());
 }

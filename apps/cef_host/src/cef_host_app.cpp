@@ -15,7 +15,17 @@ CefHostApp::CefHostApp(std::shared_ptr<cef_api::APIInterface> api) : api_(std::m
 void CefHostApp::OnContextInitialized() {
 #if defined(_WIN32)
   CefWindowInfo window_info;
-  window_info.SetAsPopup(nullptr, "CEF React Demo");
+  if (parent_.hwnd) {
+    RECT rc = {0, 0, 0, 0};
+    if (::GetClientRect(reinterpret_cast<HWND>(parent_.hwnd), &rc)) {
+      parent_.width = rc.right - rc.left;
+      parent_.height = rc.bottom - rc.top;
+    }
+    CefRect bounds(parent_.x, parent_.y, parent_.width, parent_.height);
+    window_info.SetAsChild(reinterpret_cast<CefWindowHandle>(parent_.hwnd), bounds);
+  } else {
+    window_info.SetAsPopup(nullptr, "CEF React Demo");
+  }
 
   CefBrowserSettings settings;
   CefString url = "http://localhost:5173";  // Dev: npm run dev. Prod: file:// to frontend/dist/index.html

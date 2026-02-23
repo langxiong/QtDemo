@@ -1,61 +1,44 @@
 #include "ControllerApp.h"
-#include "QtSubsystem.h"
-
-#include <QApplication>
-#include <QCoreApplication>
-#include <QGridLayout>
-#include <QGroupBox>
-#include <QLabel>
-#include <QMetaObject>
-#include <QTimer>
-#include <QVBoxLayout>
-#include <QWidget>
-#include <QDir>
-
-#include <QChart>
-#include <QChartView>
-#include <QLineSeries>
-#include <QValueAxis>
+#include "ControllerRuntimeDds.h"
+#include "DeviceSimulator.h"
+#include "IpcServer.h"
 
 #include "common/config/ConfigPoco.h"
-#include "ControllerRuntimeDds.h"
 #include "common/log/Log.h"
 #include "common/sensor/SensorPipeline.h"
-#include "common/status/Models.h"
-#include "common/status/StatusSnapshot.h"
-#include "DemoController.h"
-#include "MainWindow.h"
 
+#include <Poco/Environment.h>
 #include <Poco/Path.h>
+#include <Poco/Process.h>
 #include <chrono>
+#include <cstdint>
+#include <memory>
 #include <string>
 #include <thread>
 
-static void AddRow(QGridLayout* grid, int row, const QString& name, QLabel*& valueOut, QWidget* parent) {
-  auto* nameLbl = new QLabel(name, parent);
-  auto* valLbl = new QLabel("-", parent);
-  grid->addWidget(nameLbl, row, 0);
-  grid->addWidget(valLbl, row, 1);
-  valueOut = valLbl;
-}
+#if defined(_WIN32) && defined(CONTROLLER_HAVE_DUILIB)
+#include "UISubsystem.hpp"
+#endif
 
 ControllerApp::ControllerApp() {
-  setUnixOptions(true);  // Parse --verify-startup (Windows default uses /option)
+  setUnixOptions(true);
 }
+
+ControllerApp::~ControllerApp() = default;
 
 void ControllerApp::initialize(Poco::Util::Application& self) {
   loadConfiguration();
-  addSubsystem(new QtSubsystem);
   Application::initialize(self);
   common::log::InitFromConfig(common::config::WrapPocoConfig(config()), "controller_app");
 }
 
 void ControllerApp::defineOptions(Poco::Util::OptionSet& options) {
   Application::defineOptions(options);
-  options.addOption(Poco::Util::Option("verify-startup", "v", "Verify startup handshake and exit")
-                        .required(false)
-                        .repeatable(false)
-                        .callback(Poco::Util::OptionCallback<ControllerApp>(this, &ControllerApp::handleOption)));
+  options.addOption(
+      Poco::Util::Option("verify-startup", "v", "Verify startup handshake and exit")
+          .required(false)
+          .repeatable(false)
+          .callback(Poco::Util::OptionCallback<ControllerApp>(this, &ControllerApp::handleOption)));
 }
 
 void ControllerApp::handleOption(const std::string& name, const std::string& value) {
@@ -67,24 +50,23 @@ void ControllerApp::handleOption(const std::string& name, const std::string& val
 }
 
 int ControllerApp::main(const std::vector<std::string>& args) {
-  common::log::SetThreadName("ui");
-  common::log::Info("main", "controller_app starting");
-
-  auto& qtSys = getSubsystem<QtSubsystem>();
-  QApplication* qtApp = qtSys.qApplication();
-  if (!qtApp) {
-    common::log::Error("main", "QtSubsystem failed to create QApplication");
-    return Application::EXIT_SOFTWARE;
-  }
+  (void)args;
+  common::log::SetThreadName("main");
 
   std::string appDirPath;
   Poco::Path appPath;
   getApplicationPath(appPath);
   appDirPath = appPath.parent().absolute().toString();
 
+#if defined(_WIN32) && defined(CONTROLLER_HAVE_DUILIB)
+  common::log::Info("main", "controller_app starting (GUI mode)");
+#else
+  common::log::Info("main", "controller_app starting (headless)");
+#endif
+
   auto cfg = common::config::WrapPocoConfig(config());
   const int sensorRateHz = config().getInt("sensor.rate_hz", 200);
-  const int uiRefreshHz = config().getInt("ui.refresh_hz", 30);
+  const int simIntervalMs = 50;
 
   common::sensor::SensorPipeline sensor(common::sensor::SensorPipeline::Params{sensorRateHz});
   sensor.start();
@@ -93,6 +75,22 @@ int ControllerApp::main(const std::vector<std::string>& args) {
   controller_app::ControllerRuntimeDds runtime(cfg, sensor, statusStore, appDirPath);
   runtime.start();
 
+  DeviceSimulator device;
+  std::atomic<bool> simRunning{true};
+  std::thread simThread([&device, &simRunning, simIntervalMs]() {
+    auto lastStep = std::chrono::steady_clock::now();
+    while (simRunning) {
+      auto now = std::chrono::steady_clock::now();
+      double dt = std::chrono::duration<double>(now - lastStep).count();
+      lastStep = now;
+      if (dt > 0 && dt < 1.0) device.step(dt);
+      std::this_thread::sleep_for(std::chrono::milliseconds(simIntervalMs));
+    }
+  });
+
+  controller_app::IpcServer ipcServer(cfg, device, statusStore, sensor);
+  ipcServer.start();
+
   if (_verifyStartup) {
     const int timeoutMs = config().getInt("ipc.ready_timeout_ms", 10000) + 5000;
     const int pollMs = 200;
@@ -100,12 +98,19 @@ int ControllerApp::main(const std::vector<std::string>& args) {
     while (elapsed < timeoutMs) {
       const auto st = statusStore.read();
       if (st.algoHealth == common::status::AlgoHealthState::Healthy) {
+        ipcServer.stop();
+        simRunning = false;
+        if (simThread.joinable()) simThread.join();
         runtime.stop();
         sensor.stop();
         common::log::Info("main", "verify-startup: handshake OK");
         return Application::EXIT_OK;
       }
-      if (st.systemState == common::status::SystemState::Degraded && st.lastError != common::status::ErrorCode::Ok) {
+      if (st.systemState == common::status::SystemState::Degraded &&
+          st.lastError != common::status::ErrorCode::Ok) {
+        ipcServer.stop();
+        simRunning = false;
+        if (simThread.joinable()) simThread.join();
         runtime.stop();
         sensor.stop();
         common::log::Error("main", "verify-startup: handshake failed");
@@ -114,140 +119,57 @@ int ControllerApp::main(const std::vector<std::string>& args) {
       std::this_thread::sleep_for(std::chrono::milliseconds(pollMs));
       elapsed += pollMs;
     }
+    ipcServer.stop();
+    simRunning = false;
+    if (simThread.joinable()) simThread.join();
     runtime.stop();
     sensor.stop();
     common::log::Error("main", "verify-startup: timeout waiting for healthy");
     return Application::EXIT_UNAVAILABLE;
   }
 
-  QWidget window;
-  window.setWindowTitle(QStringLiteral("Medical Robot Control Demo"));
-
-  auto* root = new QVBoxLayout(&window);
-
-  auto* demoView = new MainWindow(&window);
-  root->addWidget(demoView);
-  DemoController demoController(demoView);
-  const int simIntervalMs = 50;
-  demoController.startSimulationTimer(simIntervalMs);
-
-  common::log::SetSink([demoView](common::log::Level level, const std::string& module, const std::string& message) {
-    QString line = QString::fromStdString("[" + common::log::LevelToString(level) + "][" + module + "] " + message);
-    QMetaObject::invokeMethod(demoView, "appendLog", Qt::QueuedConnection, Q_ARG(QString, line));
-  });
-
-  auto* grpSignals = new QGroupBox("Signals", &window);
-  auto* grpHealth = new QGroupBox("Process/Health", &window);
-  auto* grpControl = new QGroupBox("Control/Actuator", &window);
-
-  auto* gridSignals = new QGridLayout(grpSignals);
-  auto* gridHealth = new QGridLayout(grpHealth);
-  auto* gridControl = new QGridLayout(grpControl);
-
-  QLabel *valRate, *valSeq, *valA, *valB, *valC, *valMiss;
-  AddRow(gridSignals, 0, "Sensor rate (Hz):", valRate, grpSignals);
-  AddRow(gridSignals, 1, "Sensor seq:", valSeq, grpSignals);
-  AddRow(gridSignals, 2, "Value A:", valA, grpSignals);
-  AddRow(gridSignals, 3, "Value B:", valB, grpSignals);
-  AddRow(gridSignals, 4, "Value C:", valC, grpSignals);
-  AddRow(gridSignals, 5, "Missed deadlines:", valMiss, grpSignals);
-
-  QLabel *valState, *valAlgo, *valRtt, *valRestarts;
-  AddRow(gridHealth, 0, "System state:", valState, grpHealth);
-  AddRow(gridHealth, 1, "Algo health:", valAlgo, grpHealth);
-  AddRow(gridHealth, 2, "Heartbeat RTT (ms):", valRtt, grpHealth);
-  AddRow(gridHealth, 3, "Algo restarts:", valRestarts, grpHealth);
-
-  QLabel *valCmd, *valPos, *valVel, *valAlgoLat;
-  AddRow(gridControl, 0, "Last command:", valCmd, grpControl);
-  AddRow(gridControl, 1, "Actuator position:", valPos, grpControl);
-  AddRow(gridControl, 2, "Actuator velocity:", valVel, grpControl);
-  AddRow(gridControl, 3, "Algo latency (ms):", valAlgoLat, grpControl);
-
-  auto* seriesCmd = new QLineSeries(&window);
-  seriesCmd->setName("cmd");
-
-  auto* chart = new QChart();
-  chart->addSeries(seriesCmd);
-  chart->legend()->hide();
-  chart->setTitle("Control Command Trend");
-
-  auto* axisX = new QValueAxis();
-  axisX->setLabelFormat("%d");
-  axisX->setTitleText("samples");
-  axisX->setRange(0, 299);
-
-  auto* axisY = new QValueAxis();
-  axisY->setTitleText("cmd");
-  axisY->setRange(-2.0, 2.0);
-
-  chart->addAxis(axisX, Qt::AlignBottom);
-  chart->addAxis(axisY, Qt::AlignLeft);
-  seriesCmd->attachAxis(axisX);
-  seriesCmd->attachAxis(axisY);
-
-  auto* chartView = new QChartView(chart, &window);
-  chartView->setRenderHint(QPainter::Antialiasing);
-  chartView->setMinimumHeight(220);
-
-  root->addWidget(grpSignals);
-  root->addWidget(grpHealth);
-  root->addWidget(grpControl);
-  root->addWidget(chartView);
-
-  static constexpr int kWindow = 300;
-  int sampleIndex = 0;
-
-  QTimer timer;
-  QObject::connect(&timer, &QTimer::timeout, [&]() {
-    const auto snap = sensor.latest();
-
-    valRate->setText(QString::number(snap.effectiveRateHz, 'f', 1));
-    valSeq->setText(QString::number(static_cast<qulonglong>(snap.latest.seq)));
-    valA->setText(QString::number(snap.latest.valueA, 'f', 4));
-    valB->setText(QString::number(snap.latest.valueB, 'f', 4));
-    valC->setText(QString::number(snap.latest.valueC, 'f', 4));
-    valMiss->setText(QString::number(static_cast<qulonglong>(snap.missedDeadlines)));
-
-    const auto st = statusStore.read();
-    valState->setText(QString::fromLatin1(common::status::ToString(st.systemState)));
-    valAlgo->setText(QString::fromLatin1(common::status::ToString(st.algoHealth)));
-    valRtt->setText(QString::number(st.heartbeatRttMs, 'f', 2));
-    valRestarts->setText(QString::number(static_cast<qulonglong>(st.algoRestarts)));
-
-    valCmd->setText(QString::number(st.lastCommand, 'f', 4));
-    valPos->setText(QString::number(st.actuatorPosition, 'f', 4));
-    valVel->setText(QString::number(st.actuatorVelocity, 'f', 4));
-    valAlgoLat->setText(QString::number(st.algoLatencyMs, 'f', 2));
-
-    if (seriesCmd->count() >= kWindow) {
-      seriesCmd->removePoints(0, seriesCmd->count() - (kWindow - 1));
+#if defined(_WIN32) && defined(CONTROLLER_HAVE_DUILIB)
+  _ui = std::make_unique<controller_app::UISubsystem>();
+  if (_ui->create(800, 600, L"Medical Robot Control Demo")) {
+    _ui->show();
+    void* clientHwnd = _ui->getClientHwnd();
+    if (clientHwnd) {
+      Poco::Path cefHostPath(appDirPath);
+      cefHostPath.append("cef_host.exe");
+      std::string cefHostExe = cefHostPath.absolute().toString();
+      std::string hwndArg = "--parent-hwnd=" + std::to_string(reinterpret_cast<uintptr_t>(clientHwnd));
+      Poco::Process::Args launchArgs;
+      launchArgs.push_back(hwndArg);
+      int apiPort = config().getInt("ipc.api_port", 9123);
+      std::string ipcAddr = "127.0.0.1:" + std::to_string(apiPort);
+      Poco::Environment::set("MRCD_CONTROLLER_IPC_ADDR", ipcAddr);
+      try {
+        Poco::ProcessHandle ph = Poco::Process::launch(cefHostExe, launchArgs);
+        common::log::Info("main", "launched cef_host with parent-hwnd, IPC=" + ipcAddr);
+      } catch (const std::exception& e) {
+        common::log::Error("main", std::string("failed to launch cef_host: ") + e.what());
+      }
     }
-    seriesCmd->append(sampleIndex++, st.lastCommand);
+    common::log::Info("main", "controller_app running (GUI). Close window to exit.");
+    _ui->runMessageLoop();
+  } else {
+    common::log::Error("main", "UISubsystem create failed; running headless");
+    common::log::Info("main", "controller_app running (IPC server active). Press Ctrl+C to exit.");
+    waitForTerminationRequest();
+  }
+#else
+  common::log::Info("main", "controller_app running (IPC server active). Press Ctrl+C to exit.");
+  waitForTerminationRequest();
+#endif
 
-    const int minX = std::max(0, sampleIndex - kWindow);
-    axisX->setRange(minX, minX + (kWindow - 1));
-
-    const double y = st.lastCommand;
-    if (y < axisY->min() || y > axisY->max()) {
-      const double pad = 0.2;
-      axisY->setRange(y - 1.0 - pad, y + 1.0 + pad);
-    }
-  });
-
-  const int intervalMs = (uiRefreshHz > 0) ? (1000 / uiRefreshHz) : 33;
-  timer.start(intervalMs);
-
-  window.resize(760, 900);
-  window.show();
-
-  const int rc = qtApp->exec();
-
-  demoController.stopSimulationTimer();
-  timer.stop();
+  ipcServer.stop();
+  simRunning = false;
+  if (simThread.joinable()) simThread.join();
   runtime.stop();
   sensor.stop();
-
+#if defined(_WIN32) && defined(CONTROLLER_HAVE_DUILIB)
+  if (_ui) _ui->close();
+#endif
   common::log::Info("main", "controller_app exiting");
-  return rc;
+  return Application::EXIT_OK;
 }

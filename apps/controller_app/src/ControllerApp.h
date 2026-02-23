@@ -1,13 +1,17 @@
 #pragma once
 
-#include <Poco/Util/Application.h>
 #include <Poco/Util/OptionSet.h>
+#include <Poco/Util/ServerApplication.h>
+#include <memory>
 
-class QtSubsystem;
+#if defined(_WIN32) && defined(CONTROLLER_HAVE_DUILIB)
+namespace controller_app { class UISubsystem; }
+#endif
 
-class ControllerApp : public Poco::Util::Application {
+class ControllerApp : public Poco::Util::ServerApplication {
 public:
   ControllerApp();
+  ~ControllerApp();
 
 protected:
   void initialize(Poco::Util::Application& self) override;
@@ -17,4 +21,8 @@ protected:
 
 private:
   bool _verifyStartup{false};
+
+#if defined(_WIN32) && defined(CONTROLLER_HAVE_DUILIB)
+  std::unique_ptr<controller_app::UISubsystem> _ui;
+#endif
 };

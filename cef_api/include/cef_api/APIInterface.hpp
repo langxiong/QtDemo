@@ -35,6 +35,9 @@ public:
   /** Optional: hook for ControlLoop integration. Called when app start/stop (true/false). Run ControlLoop in dedicated thread to avoid blocking CEF message loop. */
   void setOnApplicationRunningChange(std::function<void(bool running)> f);
 
+  /** Set optional backend. When set, process() forwards to backend first; on empty response, falls back to local handlers. */
+  void setBackend(std::function<std::string(const std::string&)> backend);
+
 private:
   std::string route(const std::string& method, const nlohmann::json& params);
   std::string makeError(const std::string& callId, const std::string& message);
@@ -43,6 +46,7 @@ private:
   std::unique_ptr<StreamHandler> streamHandler_;
   std::vector<HandlerFn> handlers_;
   std::vector<ObserverFn> observers_;
+  std::function<std::string(const std::string&)> backend_;
 };
 
 }  // namespace cef_api

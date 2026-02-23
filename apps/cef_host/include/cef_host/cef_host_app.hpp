@@ -9,10 +9,17 @@
 
 namespace cef_host {
 
+/** Parent window info for SetAsChild (from --parent-hwnd). */
+struct ParentWindowInfo {
+  void* hwnd{nullptr};
+  int x{0}, y{0}, width{800}, height{600};
+};
+
 /** CEF app: owns APIInterface, creates browser window, handles process messages. */
 class CefHostApp : public CefApp, public CefBrowserProcessHandler, public CefClient, public CefLifeSpanHandler {
 public:
   explicit CefHostApp(std::shared_ptr<cef_api::APIInterface> api);
+  void setParentWindow(ParentWindowInfo info) { parent_ = info; }
   CefRefPtr<CefBrowserProcessHandler> GetBrowserProcessHandler() override { return this; }
   CefRefPtr<CefRenderProcessHandler> GetRenderProcessHandler() override { return render_handler_; }
   CefRefPtr<CefLifeSpanHandler> GetLifeSpanHandler() override { return this; }
@@ -23,8 +30,11 @@ public:
   bool DoClose(CefRefPtr<CefBrowser> browser) override;
   void OnBeforeClose(CefRefPtr<CefBrowser> browser) override;
 
+  CefRefPtr<CefBrowser> GetBrowser() const { return browser_; }
+
 private:
   std::shared_ptr<cef_api::APIInterface> api_;
+  ParentWindowInfo parent_;
   CefRefPtr<CefBrowser> browser_;
   CefRefPtr<CefRenderHandler> render_handler_{new CefRenderHandler};
   IMPLEMENT_REFCOUNTING(CefHostApp);
